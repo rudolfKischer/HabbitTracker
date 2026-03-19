@@ -584,41 +584,60 @@ async def api_heatmap(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/api/stats/overview")
-async def api_stats_overview(request: Request, db: Session = Depends(get_db)):
+async def api_stats_overview(request: Request, db: Session = Depends(get_db),
+                             window: str = "month"):
     user_id = await require_user(request, db)
     if not user_id:
         return JSONResponse({})
 
     habits = database.get_habits(db, user_id)
     today = datetime.now().date()
-    start_30 = (today - timedelta(days=30)).isoformat()
+    if window == "week":
+        start_d = today - timedelta(days=6)
+    elif window == "month":
+        start_d = today.replace(day=1)
+    elif window == "quarter":
+        start_d = today - timedelta(days=90)
+    elif window == "year":
+        start_d = today - timedelta(days=365)
+    elif window == "all":
+        start_d = today - timedelta(days=365 * 10)
+    else:
+        legacy = {"7d": 7, "30d": 30, "90d": 90}
+        start_d = today - timedelta(days=legacy.get(window, 30))
+    start = start_d.isoformat()
 
     habit_rates = []
     for h in habits:
-        data = database.get_stats_data(db, h.id, start_30)
-        logged = len(data)
+        data = database.get_stats_data(db, h.id, start)
         done = sum(1 for d in data if d["completed"])
-        rate = round(done / logged * 100) if logged else 0
+        # Use all days from earliest record (or window start) to today
+        if data:
+            earliest = date.fromisoformat(data[0]["log_date"])
+            effective_start = max(start_d, earliest)
+        else:
+            effective_start = start_d
+        total_days = (today - effective_start).days + 1
+        rate = round(done / total_days * 100) if total_days > 0 else 0
         habit_rates.append({
             "id": h.id,
             "name": h.name,
             "rate": rate,
             "done": done,
-            "logged": logged,
+            "total_days": total_days,
         })
 
     habit_rates.sort(key=lambda x: x["rate"], reverse=True)
 
     total_done = sum(h["done"] for h in habit_rates)
-    total_logged = sum(h["logged"] for h in habit_rates)
-    overall_rate = round(total_done / total_logged * 100) if total_logged else 0
+    total_all_days = sum(h["total_days"] for h in habit_rates)
+    overall_rate = round(total_done / total_all_days * 100) if total_all_days else 0
 
-    start_90 = (today - timedelta(days=90)).isoformat()
     day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     day_totals = [0] * 7
     day_done = [0] * 7
     for h in habits:
-        data = database.get_stats_data(db, h.id, start_90)
+        data = database.get_stats_data(db, h.id, start)
         for d in data:
             wd = date.fromisoformat(d["log_date"]).weekday()
             day_totals[wd] += 1
@@ -643,17 +662,35 @@ async def api_stats(request: Request, habit_id: int, db: Session = Depends(get_d
     if not habit:
         return JSONResponse({"error": "not found"}, status_code=404)
 
-    windows = {"7d": 7, "30d": 30, "90d": 90, "all": 365 * 10}
-    days = windows.get(window, 30)
-    start_d = datetime.now().date() - timedelta(days=days)
+    today = datetime.now().date()
+    if window == "week":
+        start_d = today - timedelta(days=6)
+    elif window == "month":
+        start_d = today.replace(day=1)
+    elif window == "quarter":
+        start_d = today - timedelta(days=90)
+    elif window == "year":
+        start_d = today - timedelta(days=365)
+    elif window == "all":
+        start_d = today - timedelta(days=365 * 10)
+    else:
+        # Legacy support
+        legacy = {"7d": 7, "30d": 30, "90d": 90}
+        start_d = today - timedelta(days=legacy.get(window, 30))
     start = start_d.isoformat()
     data = database.get_stats_data(db, habit_id, start)
 
     # Compute summary stats
-    total_days = days if window != "all" else (datetime.now().date() - start_d).days
+    # Completion rate: count all days from the later of (window start, earliest record) to today
     completed_days = sum(1 for d in data if d["completed"])
     total_logged = len(data)
-    completion_rate = round(completed_days / total_logged * 100) if total_logged else 0
+    if data:
+        earliest_record = date.fromisoformat(data[0]["log_date"])
+        effective_start = max(start_d, earliest_record)
+    else:
+        effective_start = start_d
+    total_days = (today - effective_start).days + 1
+    completion_rate = round(completed_days / total_days * 100) if total_days > 0 else 0
 
     # Current streak & best streak
     # Build a dict of date_str -> truly completed
@@ -674,20 +711,27 @@ async def api_stats(request: Request, habit_id: int, db: Session = Depends(get_d
 
     # Current streak: walk backwards from today
     current_streak = 0
+    current_streak_end = None
     d = today
     while True:
         ds = d.isoformat()
         if ds in completed_dates:
             if completed_dates[ds]:
+                if current_streak == 0:
+                    current_streak_end = ds
                 current_streak += 1
             else:
                 break
         elif d == today:
-            # Today might not have a log yet, skip it
             pass
         else:
             break
         d -= timedelta(days=1)
+
+    current_streak_start = None
+    if current_streak_end and current_streak > 0:
+        end_date = date.fromisoformat(current_streak_end)
+        current_streak_start = (end_date - timedelta(days=current_streak - 1)).isoformat()
 
     # Best streak: walk all calendar days in range
     # Only break streak on days that have a log with completed=False
@@ -695,7 +739,8 @@ async def api_stats(request: Request, habit_id: int, db: Session = Depends(get_d
     best_streak = 0
     best_streak_end = None
     streak = 0
-    for i in range(total_days + 1):
+    all_days_in_range = (today - start_d).days + 1
+    for i in range(all_days_in_range):
         ds = (start_d + timedelta(days=i)).isoformat()
         if completed_dates.get(ds, False):
             streak += 1
@@ -709,6 +754,22 @@ async def api_stats(request: Request, habit_id: int, db: Session = Depends(get_d
     if best_streak_end and best_streak > 0:
         end_date = date.fromisoformat(best_streak_end)
         best_streak_start = (end_date - timedelta(days=best_streak - 1)).isoformat()
+
+    # Per-habit day-of-week stats
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    day_totals = [0] * 7
+    day_done = [0] * 7
+    # Count all calendar days in the effective range, not just logged days
+    for i in range((today - effective_start).days + 1):
+        d_date = effective_start + timedelta(days=i)
+        wd = d_date.weekday()
+        day_totals[wd] += 1
+    for d_entry in data:
+        d_date = date.fromisoformat(d_entry["log_date"])
+        wd = d_date.weekday()
+        if d_entry["completed"]:
+            day_done[wd] += 1
+    day_rates = [round(day_done[i] / day_totals[i] * 100) if day_totals[i] else 0 for i in range(7)]
 
     # Metric stats
     metric_values = [d["metric_value"] for d in data if d["metric_value"] is not None]
@@ -732,14 +793,17 @@ async def api_stats(request: Request, habit_id: int, db: Session = Depends(get_d
             "metric_max": habit.metric_max,
         },
         "summary": {
-            "total_days": total_logged,
+            "total_days": total_days,
             "completed_days": completed_days,
             "completion_rate": completion_rate,
             "current_streak": current_streak,
+            "current_streak_start": current_streak_start,
+            "current_streak_end": current_streak_end,
             "best_streak": best_streak,
             "best_streak_start": best_streak_start,
             "best_streak_end": best_streak_end,
             "metric": metric_summary,
+            "day_of_week": {"labels": day_names, "rates": day_rates},
         },
     })
 

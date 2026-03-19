@@ -15,7 +15,7 @@
     <div class="todo-actions">
       {% if depth == 0 and categories %}
       <select class="category-select todo-category-select" title="Category"
-              onchange="fetch('/todos/{{ todo.id }}/category', {method:'POST', body: new URLSearchParams({category_id: this.value})}).then(r=>r.text()).then(html=>{document.getElementById('todo-list').innerHTML=html; htmx.process(document.getElementById('todo-list'));});">
+              onchange="fetch('/todos/{{ todo.id }}/category', {method:'POST', body: new URLSearchParams({category_id: this.value})}).then(r=>r.text()).then(html=>{if(typeof isCarouselMode==='function'&&isCarouselMode()){refreshCarousel();return;}document.getElementById('todo-list').innerHTML=html; htmx.process(document.getElementById('todo-list'));});">
         <option value="">--</option>
         {% for cat in categories %}
         <option value="{{ cat.id }}" {% if todo.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>

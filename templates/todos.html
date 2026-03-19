@@ -34,7 +34,7 @@
   </div>
 
   <!-- Carousel view -->
-  <div class="carousel-view" x-show="viewMode === 'carousel'" x-cloak
+  <div id="carousel-container" class="carousel-view" x-show="viewMode === 'carousel'" x-cloak
        x-data="todoCarousel()" x-init="init()">
     <div class="carousel-scene" :style="'height:' + sceneHeight + 'px'"
          @resize.window="updateHeight()">
@@ -109,6 +109,43 @@
 </div>
 
 <script>
+// ── Refresh carousel after any todo mutation ──
+function isCarouselMode() {
+  return (localStorage.getItem('todoViewMode') || 'list') === 'carousel';
+}
+
+function refreshCarousel() {
+  var container = document.getElementById('carousel-container');
+  if (!container) return;
+  fetch('/todos', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(html, 'text/html');
+      var newCarousel = doc.getElementById('carousel-container');
+      if (newCarousel) {
+        container.innerHTML = newCarousel.innerHTML;
+        // Re-init Alpine on the new content
+        Alpine.initTree(container);
+        // Re-init carousel state
+        var data = Alpine.$data(container);
+        if (data && data.init) {
+          data.total = container.querySelectorAll('.carousel-card').length;
+          data.updateHeight();
+        }
+        // Re-process HTMX
+        htmx.process(container);
+      }
+    });
+}
+
+(function() {
+  // HTMX-based mutations (toggle, delete, add)
+  document.addEventListener('htmx:afterSwap', function(e) {
+    if (isCarouselMode()) refreshCarousel();
+  });
+})();
+
 // ── Carousel logic ──
 function todoCarousel() {
   return {
@@ -322,6 +359,9 @@ function todoCarousel() {
     fetch('/todos/' + dragId + '/move', { method: 'POST', body: formData })
       .then(r => r.text())
       .then(html => {
+        if ((localStorage.getItem('todoViewMode') || 'list') === 'carousel') {
+          location.reload(); return;
+        }
         const list = document.getElementById('todo-list');
         list.innerHTML = html;
         htmx.process(list);
@@ -354,6 +394,9 @@ document.addEventListener('dblclick', function(e) {
       fetch('/todos/' + todoId, { method: 'PATCH', body: fd })
         .then(r => r.text())
         .then(html => {
+          if (isCarouselMode()) {
+            refreshCarousel(); return;
+          }
           const list = document.getElementById('todo-list');
           list.innerHTML = html;
           htmx.process(list);

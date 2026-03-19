@@ -3,23 +3,33 @@
 
 {% block content %}
 <div class="stats-container">
-  <h2 class="section-title">Stats</h2>
-
   {% if habits %}
   <div x-data="statsPage('{{ habits[0].id }}')">
+
+    <!-- Title row with time window -->
+    <div class="stats-header">
+      <h2 class="section-title">Stats</h2>
+      <div class="window-btns">
+        {% for w, label in [('week', 'Week'), ('month', 'Month'), ('quarter', 'Quarter'), ('year', 'Year'), ('all', 'All')] %}
+        <button class="window-btn" :class="timeWindow === '{{ w }}' ? 'active' : ''"
+                @click="timeWindow = '{{ w }}'; loadAll()">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </div>
 
     <!-- Summary cards -->
     <div class="stats-summary-row" x-show="overviewLoaded" x-cloak>
       <div class="stat-card">
         <div class="stat-card-value accent" x-text="overview.overall_rate + '%'"></div>
-        <div class="stat-card-label">Overall (30d)</div>
+        <div class="stat-card-label">Overall</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card-clickable" :class="highlightMode === 'current' ? 'stat-card-active' : ''"
+           @click="toggleHighlight('current')">
         <div class="stat-card-value" x-text="summary.current_streak"></div>
         <div class="stat-card-label">Current Streak</div>
       </div>
-      <div class="stat-card stat-card-clickable" :class="highlightStreak ? 'stat-card-active' : ''"
-           @click="toggleStreakHighlight()">
+      <div class="stat-card stat-card-clickable" :class="highlightMode === 'best' ? 'stat-card-active' : ''"
+           @click="toggleHighlight('best')">
         <div class="stat-card-value" x-text="summary.best_streak"></div>
         <div class="stat-card-label">Best Streak</div>
       </div>
@@ -42,34 +52,29 @@
     </div>
 
     <!-- Chart -->
-    <div class="stats-controls">
-      <div class="stats-selectors">
-        <select class="form-select" x-model="habitId" @change="loadChart()">
-          {% for h in habits %}
-          <option value="{{ h.id }}">{{ h.name }}</option>
-          {% endfor %}
-        </select>
-        <div class="window-btns">
-          {% for w in ['7d', '30d', '90d', 'all'] %}
-          <button class="window-btn" :class="timeWindow === '{{ w }}' ? 'active' : ''"
-                  @click="timeWindow = '{{ w }}'; loadChart()">{{ w }}</button>
-          {% endfor %}
-        </div>
+    <div class="stats-habit-select">
+      <select class="form-select" x-model="habitId" @change="loadAll()">
+        {% for h in habits %}
+        <option value="{{ h.id }}">{{ h.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="chart-wrapper">
+      <div class="chart-loading" x-show="loading" x-transition>Loading...</div>
+      <div x-ref="canvasWrap"></div>
+      <div class="heatmap-container" x-ref="heatmapWrap" style="display:none">
+        <div class="heatmap-months" x-ref="heatmapMonths"></div>
+        <div class="heatmap-grid" x-ref="heatmapGrid"></div>
       </div>
-      <div class="chart-wrapper">
-        <div class="chart-loading" x-show="loading" x-transition>Loading...</div>
-        <canvas id="stats-chart" x-show="hasMetric" x-cloak></canvas>
-        <div class="heatmap-container" x-show="!hasMetric" x-cloak>
-          <div class="heatmap-months" x-ref="heatmapMonths"></div>
-          <div class="heatmap-grid" x-ref="heatmapGrid"></div>
-        </div>
-      </div>
+      <input type="range" class="heatmap-scroll-slider" x-ref="heatmapSlider"
+             min="0" max="100" value="100" style="display:none"
+             @input="$refs.heatmapGrid.scrollLeft = ($refs.heatmapGrid.scrollWidth - $refs.heatmapGrid.clientWidth) * ($event.target.value / 100)">
     </div>
 
     <!-- Rankings & day-of-week -->
     <div class="stats-two-col" x-show="overviewLoaded" x-cloak>
       <div class="stats-overview-section">
-        <div class="stats-section-title">Habit Ranking (30d)</div>
+        <div class="stats-section-title">Consistency</div>
         <div class="habit-rank-list">
           <template x-for="h in overview.habit_rates" :key="h.id">
             <div class="habit-rank-row">
@@ -83,15 +88,16 @@
         </div>
       </div>
       <div class="stats-overview-section">
-        <div class="stats-section-title">Best Days (90d)</div>
+        <div class="stats-section-title">Completion by Day</div>
+        <div class="stats-section-subtitle" x-text="habitName"></div>
         <div class="dow-chart">
-          <template x-for="(rate, i) in overview.day_of_week.rates" :key="i">
+          <template x-for="(rate, i) in (summary.day_of_week ? summary.day_of_week.rates : [])" :key="i">
             <div class="dow-bar-col">
               <div class="dow-pct" x-text="rate + '%'"></div>
               <div class="dow-bar-wrap">
                 <div class="dow-bar" :style="'height:' + Math.max(rate, 3) + '%'"></div>
               </div>
-              <div class="dow-label" x-text="overview.day_of_week.labels[i]"></div>
+              <div class="dow-label" x-text="summary.day_of_week.labels[i]"></div>
             </div>
           </template>
         </div>
@@ -111,15 +117,16 @@ Chart.defaults.animation = false;
 function statsPage(defaultHabitId) {
   return {
     habitId: defaultHabitId,
-    timeWindow: '30d',
+    timeWindow: 'month',
     chart: null,
     hasMetric: false,
     loading: false,
     overviewLoaded: false,
     habitUnit: '',
+    habitName: '',
     overview: { overall_rate: 0, habit_rates: [], day_of_week: { labels: [], rates: [] } },
     summary: { current_streak: 0, best_streak: 0, completion_rate: 0, metric: null },
-    highlightStreak: false,
+    highlightMode: null,
     _lastJson: null,
 
     _inited: false,
@@ -127,13 +134,18 @@ function statsPage(defaultHabitId) {
       if (this._inited) return;
       this._inited = true;
       var self = this;
-      self.loadOverview();
-      setTimeout(function() { self.loadChart(); }, 50);
+      setTimeout(function() { self.loadAll(); }, 50);
+    },
+
+    loadAll: function() {
+      this.highlightMode = null;
+      this.loadOverview();
+      this.loadChart();
     },
 
     loadOverview: function() {
       var self = this;
-      fetch('/api/stats/overview')
+      fetch('/api/stats/overview?window=' + self.timeWindow)
         .then(function(r) { return r.json(); })
         .then(function(j) {
           if (j.habit_rates) {
@@ -151,19 +163,20 @@ function statsPage(defaultHabitId) {
       self._loadSeq++;
       var seq = self._loadSeq;
       self.loading = true;
-      // Destroy existing chart immediately so canvas is free
+      // Destroy existing chart immediately
       if (self.chart) {
         self.chart.destroy();
         self.chart = null;
       }
-      self.hasMetric = false;
       fetch('/api/stats/' + self.habitId + '?window=' + self.timeWindow)
         .then(function(r) { return r.json(); })
         .then(function(j) {
-          // Only render if this is still the latest request
           if (seq !== self._loadSeq) return;
           if (j.summary) self.summary = j.summary;
           self.habitUnit = (j.habit && j.habit.metric_unit) || '';
+          self.habitName = (j.habit && j.habit.name) || '';
+          self._lastJson = j;
+          self.highlightMode = null;
           self.renderChart(j);
           self.loading = false;
         })
@@ -173,30 +186,53 @@ function statsPage(defaultHabitId) {
         });
     },
 
-    toggleStreakHighlight: function() {
+    toggleHighlight: function(mode) {
       var self = this;
-      self.highlightStreak = !self.highlightStreak;
+      self.highlightMode = (self.highlightMode === mode) ? null : mode;
       if (!self._lastJson) return;
 
-      if (!self.hasMetric) {
-        self.renderHeatmap(
-          (self._lastJson.data || []),
-          self._lastJson.habit
-        );
-        return;
-      }
+      // Reset zoom before re-rendering so measurements are correct
+      var grid = self.$refs.heatmapGrid;
+      if (grid) grid.style.zoom = '';
 
-      // For metric charts, update in place if possible
-      if (self.chart && self._lastJson) {
-        self.chart.destroy();
-        self.chart = null;
-        self.$nextTick(function() {
-          self.renderMetricChart(
-            (self._lastJson.data || []),
-            self._lastJson.habit
-          );
-        });
+      if (!self.hasMetric) {
+        self.renderHeatmap(self._lastJson.data || [], self._lastJson.habit);
+      } else {
+        self._replaceCanvas();
+        self.renderMetricChart(self._lastJson.data || [], self._lastJson.habit);
       }
+    },
+
+    _getHighlightRange: function() {
+      var s = this.summary;
+      if (this.highlightMode === 'best') {
+        return { start: s.best_streak_start, end: s.best_streak_end };
+      } else if (this.highlightMode === 'current') {
+        return { start: s.current_streak_start, end: s.current_streak_end };
+      }
+      return { start: null, end: null };
+    },
+
+    _replaceCanvas: function() {
+      if (this.chart) {
+        this.chart.destroy();
+        this.chart = null;
+      }
+      var wrap = this.$refs.canvasWrap;
+      if (wrap) {
+        wrap.innerHTML = '<canvas></canvas>';
+      }
+    },
+
+    _getCanvas: function() {
+      var wrap = this.$refs.canvasWrap;
+      if (!wrap) return null;
+      var c = wrap.querySelector('canvas');
+      if (!c) {
+        wrap.innerHTML = '<canvas></canvas>';
+        c = wrap.querySelector('canvas');
+      }
+      return c;
     },
 
     renderChart: function(json) {
@@ -204,10 +240,6 @@ function statsPage(defaultHabitId) {
       var habit = json && json.habit;
       if (!habit) return;
 
-      this._lastJson = json;
-      this.highlightStreak = false;
-
-      // Determine if metric habit
       var isMetric = false;
       if (habit.metric_enabled) {
         for (var k = 0; k < data.length; k++) {
@@ -219,164 +251,312 @@ function statsPage(defaultHabitId) {
       }
       this.hasMetric = isMetric;
 
+      // Toggle visibility
+      var canvasWrap = this.$refs.canvasWrap;
+      var heatmapWrap = this.$refs.heatmapWrap;
       if (isMetric) {
+        if (canvasWrap) canvasWrap.style.display = '';
+        if (heatmapWrap) heatmapWrap.style.display = 'none';
+        this._replaceCanvas();
         this.renderMetricChart(data, habit);
       } else {
+        if (canvasWrap) canvasWrap.style.display = 'none';
+        if (heatmapWrap) heatmapWrap.style.display = '';
         this.renderHeatmap(data, habit);
       }
     },
 
     renderHeatmap: function(data, habit) {
       var self = this;
-      var streakStart = self.summary.best_streak_start || null;
-      var streakEnd = self.summary.best_streak_end || null;
-      // Build lookup of log_date -> completed
+      var range = self._getHighlightRange();
+      var streakStart = range.start;
+      var streakEnd = range.end;
       var dateMap = {};
       for (var i = 0; i < data.length; i++) {
         dateMap[data[i].log_date] = data[i].completed;
       }
 
-      // Determine date range
-      var windows = { '7d': 7, '30d': 30, '90d': 90, 'all': 365 };
-      var numDays = windows[self.timeWindow] || 30;
-      if (self.timeWindow === 'all' && data.length > 0) {
-        var earliest = new Date(data[0].log_date + 'T12:00:00');
-        var today = new Date();
-        numDays = Math.ceil((today - earliest) / 86400000) + 1;
-        if (numDays < 30) numDays = 30;
-        if (numDays > 365) numDays = 365;
-      }
-
       var today = new Date();
       today.setHours(12, 0, 0, 0);
-      var cs = getComputedStyle(document.body);
-      var themeColor = cs.getPropertyValue('--theme').trim();
 
-      // Generate all days in range
+      // Compute start date based on window
+      var startDate;
+      if (self.timeWindow === 'month') {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1, 12, 0, 0);
+      } else if (self.timeWindow === 'quarter') {
+        startDate = new Date(today);
+        startDate.setDate(startDate.getDate() - 90);
+      } else if (self.timeWindow === 'year') {
+        startDate = new Date(today);
+        startDate.setDate(startDate.getDate() - 365);
+      } else if (self.timeWindow === 'week') {
+        startDate = new Date(today);
+        startDate.setDate(startDate.getDate() - 6);
+      } else if (self.timeWindow === 'all' && data.length > 0) {
+        startDate = new Date(data[0].log_date + 'T12:00:00');
+      } else {
+        startDate = new Date(today);
+        startDate.setDate(startDate.getDate() - 29);
+      }
+
+      // For week, end at today; for month/quarter/year/all, extend to end of current month
+      var endDate;
+      if (self.timeWindow === 'week') {
+        endDate = today;
+      } else {
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12, 0, 0);
+      }
+      var numDays = Math.ceil((endDate - startDate) / 86400000) + 1;
+
       var days = [];
-      for (var d = numDays - 1; d >= 0; d--) {
-        var dt = new Date(today);
-        dt.setDate(dt.getDate() - d);
+      for (var d = 0; d < numDays; d++) {
+        var dt = new Date(startDate);
+        dt.setDate(dt.getDate() + d);
         var iso = dt.getFullYear() + '-' +
           String(dt.getMonth() + 1).padStart(2, '0') + '-' +
           String(dt.getDate()).padStart(2, '0');
+        var isFuture = dt > today;
         days.push({
-          date: dt,
-          iso: iso,
-          dow: dt.getDay(),
+          date: dt, iso: iso, dow: dt.getDay(),
           completed: dateMap[iso] === true,
           missed: dateMap[iso] === false,
-          noLog: !(iso in dateMap)
+          noLog: !(iso in dateMap),
+          future: isFuture
         });
       }
 
-      // Build the grid: columns are weeks, rows are days of week (Sun=0 .. Sat=6)
-      // Pad the start so the first column aligns to the correct day of week
-      var startDow = days[0].dow;
       var grid = self.$refs.heatmapGrid;
       var monthsEl = self.$refs.heatmapMonths;
       if (!grid) return;
 
-      var html = '';
-      var monthHtml = '';
-      var dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+      // For week: large day tiles in a horizontal strip
+      if (self.timeWindow === 'week') {
+        if (monthsEl) monthsEl.innerHTML = '';
+        grid.style.width = '100%';
+        grid.style.maxWidth = '';
+        grid.style.overflowX = '';
+        grid.style.zoom = '';
+        var html = '<div class="heatmap-strip">';
+        for (var si = 0; si < days.length; si++) {
+          var day = days[si];
+          var cls = 'heatmap-tile';
+          if (day.completed) cls += ' done';
+          else if (day.missed) cls += ' missed';
+          else cls += ' no-log';
+          if (self.highlightMode && streakStart && streakEnd && day.iso >= streakStart && day.iso <= streakEnd) {
+            cls += ' streak-highlight';
+          } else if (self.highlightMode) {
+            cls += ' streak-dim';
+          }
+          var dayName = day.date.toLocaleDateString('en-US', { weekday: 'short' });
+          var dayNum = day.date.getDate();
+          var status = day.completed ? 'Done' : (day.missed ? 'Missed' : 'No log');
+          html += '<div class="' + cls + '" title="' + status + '">';
+          html += '<div class="heatmap-tile-day">' + dayName + '</div>';
+          html += '<div class="heatmap-tile-num">' + dayNum + '</div>';
+          html += '<div class="heatmap-tile-status">' + (day.completed ? '&#10003;' : day.missed ? '&#10007;' : '—') + '</div>';
+          html += '</div>';
+        }
+        html += '</div>';
+        grid.innerHTML = html;
+        if (self.$refs.heatmapSlider) self.$refs.heatmapSlider.style.display = 'none';
+        return;
+      }
 
-      // Day labels column
-      html += '<div class="heatmap-day-labels">';
+      // For month: calendar month view with day-of-week headers
+      if (self.timeWindow === 'month') {
+        grid.style.width = '100%';
+        grid.style.maxWidth = '';
+        grid.style.overflowX = '';
+        var monthName = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        if (monthsEl) monthsEl.innerHTML = '<div class="heatmap-month-title">' + monthName + '</div>';
+        var dowHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        var html = '<div class="heatmap-flow">';
+        // Day-of-week headers
+        for (var dh = 0; dh < 7; dh++) {
+          html += '<div class="heatmap-flow-header">' + dowHeaders[dh] + '</div>';
+        }
+        // Pad empty cells so first day aligns to correct column
+        var firstDow = days[0].dow;
+        for (var pad = 0; pad < firstDow; pad++) {
+          html += '<div class="heatmap-flow-cell empty"></div>';
+        }
+        for (var fi = 0; fi < days.length; fi++) {
+          var day = days[fi];
+          var cls = 'heatmap-flow-cell';
+          if (day.future) cls += ' future';
+          else if (day.completed) cls += ' done';
+          else if (day.missed) cls += ' missed';
+          else cls += ' no-log';
+          if (self.highlightMode && streakStart && streakEnd && day.iso >= streakStart && day.iso <= streakEnd) {
+            cls += ' streak-highlight';
+          } else if (self.highlightMode) {
+            cls += ' streak-dim';
+          }
+          var label = day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          var status = day.completed ? 'Done' : (day.missed ? 'Missed' : 'No log');
+          var dayNum = day.date.getDate();
+          html += '<div class="' + cls + '" title="' + label + ' — ' + status + '">';
+          html += '<span class="heatmap-flow-num">' + dayNum + '</span>';
+          html += '</div>';
+        }
+        html += '</div>';
+        grid.innerHTML = html;
+        grid.style.transform = '';
+        grid.style.transformOrigin = '';
+        grid.style.zoom = '';
+        grid.style.visibility = 'hidden';
+        if (self.$refs.heatmapSlider) self.$refs.heatmapSlider.style.display = 'none';
+        // Scale month grid uniformly to fit container height
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            var wrapper = self.$refs.heatmapWrap;
+            if (!wrapper || !grid) return;
+            var monthsH = monthsEl ? monthsEl.offsetHeight : 0;
+            var availH = wrapper.clientHeight - monthsH;
+            var gridH = grid.scrollHeight;
+            if (gridH > 0 && availH > 0 && Math.abs(gridH - availH) > 2) {
+              var scale = availH / gridH;
+              grid.style.zoom = scale.toFixed(4);
+            }
+            grid.style.visibility = '';
+          });
+        });
+        return;
+      }
+
+      // For quarter / year / all: GitHub-style grid grouped by month
+      grid.style.zoom = '';
+      grid.style.width = '100%';
+      grid.style.maxWidth = '100%';
+      grid.style.overflowX = 'auto';
+      grid.style.visibility = 'hidden';
+      if (monthsEl) monthsEl.innerHTML = '';
+      var startDow = days[0].dow;
+
+      // Group days into months
+      var months = [];
+      var currentMonth = -1;
+      for (var gi = 0; gi < days.length; gi++) {
+        var m = days[gi].date.getMonth();
+        if (m !== currentMonth) {
+          months.push({ label: days[gi].date.toLocaleDateString('en-US', { month: 'short' }), days: [] });
+          currentMonth = m;
+        }
+        months[months.length - 1].days.push(days[gi]);
+      }
+
+      var dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      var html = '<div class="heatmap-day-labels">';
       for (var dl = 0; dl < 7; dl++) {
-        html += '<div class="heatmap-day-label">' + (dl % 2 === 1 ? dayLabels[dl] : '') + '</div>';
+        html += '<div class="heatmap-day-label">' + dayLabels[dl] + '</div>';
       }
       html += '</div>';
 
-      // Add empty cells for padding at start
-      var cells = [];
-      for (var p = 0; p < startDow; p++) {
-        cells.push({ empty: true });
-      }
-      for (var c = 0; c < days.length; c++) {
-        cells.push(days[c]);
-      }
+      for (var mg = 0; mg < months.length; mg++) {
+        var monthGroup = months[mg];
+        // Pad start of first week in this month
+        var firstDow = monthGroup.days[0].dow;
+        var cells = [];
+        for (var p = 0; p < firstDow; p++) cells.push({ empty: true });
+        for (var mc = 0; mc < monthGroup.days.length; mc++) cells.push(monthGroup.days[mc]);
+        var totalWeeks = Math.ceil(cells.length / 7);
 
-      // Render week columns
-      var totalWeeks = Math.ceil(cells.length / 7);
-      var lastMonth = -1;
-      var monthPositions = [];
-
-      for (var w = 0; w < totalWeeks; w++) {
-        html += '<div class="heatmap-week">';
-        for (var row = 0; row < 7; row++) {
-          var idx = w * 7 + row;
-          if (idx >= cells.length || cells[idx].empty) {
-            html += '<div class="heatmap-cell empty"></div>';
-          } else {
-            var cell = cells[idx];
-            var cls = 'heatmap-cell';
-            if (cell.completed) cls += ' done';
-            else if (cell.missed) cls += ' missed';
-            else cls += ' no-log';
-            // Highlight best streak range
-            if (self.highlightStreak && streakStart && streakEnd && cell.iso >= streakStart && cell.iso <= streakEnd) {
-              cls += ' streak-highlight';
-            } else if (self.highlightStreak) {
-              cls += ' streak-dim';
-            }
-            var label = cell.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            var status = cell.completed ? 'Done' : (cell.missed ? 'Missed' : 'No log');
-            html += '<div class="' + cls + '" title="' + label + ' — ' + status + '"></div>';
-
-            // Track month boundaries
-            var m = cell.date.getMonth();
-            if (m !== lastMonth) {
-              monthPositions.push({ week: w, month: cell.date.toLocaleDateString('en-US', { month: 'short' }) });
-              lastMonth = m;
+        html += '<div class="heatmap-month-group">';
+        html += '<div class="heatmap-month-label">' + monthGroup.label + '</div>';
+        html += '<div class="heatmap-month-weeks">';
+        for (var w = 0; w < totalWeeks; w++) {
+          html += '<div class="heatmap-week">';
+          for (var row = 0; row < 7; row++) {
+            var idx = w * 7 + row;
+            if (idx >= cells.length || cells[idx].empty) {
+              html += '<div class="heatmap-cell empty"></div>';
+            } else {
+              var cell = cells[idx];
+              var cls = 'heatmap-cell';
+              if (cell.future) {
+                cls += ' future';
+              } else if (cell.completed) {
+                cls += ' done';
+              } else if (cell.missed) {
+                cls += ' missed';
+              } else {
+                cls += ' no-log';
+              }
+              if (!cell.future && self.highlightMode && streakStart && streakEnd && cell.iso >= streakStart && cell.iso <= streakEnd) {
+                cls += ' streak-highlight';
+              } else if (!cell.future && self.highlightMode) {
+                cls += ' streak-dim';
+              }
+              var label = cell.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              var status = cell.future ? 'Upcoming' : (cell.completed ? 'Done' : (cell.missed ? 'Missed' : 'No log'));
+              html += '<div class="' + cls + '" title="' + label + ' — ' + status + '"></div>';
             }
           }
+          html += '</div>';
         }
-        html += '</div>';
+        html += '</div></div>';
       }
 
       grid.innerHTML = html;
 
-      // Month labels
-      monthHtml = '<div class="heatmap-day-labels-spacer"></div>';
-      var prevEnd = 0;
-      for (var mi = 0; mi < monthPositions.length; mi++) {
-        var mp = monthPositions[mi];
-        var nextWeek = (mi + 1 < monthPositions.length) ? monthPositions[mi + 1].week : totalWeeks;
-        var span = nextWeek - mp.week;
-        monthHtml += '<div class="heatmap-month-label" style="grid-column: span ' + span + '">' + mp.month + '</div>';
-      }
-      if (monthsEl) monthsEl.innerHTML = monthHtml;
+      // Scale uniformly to fit container height, then handle horizontal overflow
+      var slider = self.$refs.heatmapSlider;
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          var wrapper = self.$refs.heatmapWrap;
+          if (!wrapper || !grid) return;
+
+          // Reset zoom and width constraint to measure natural size
+          grid.style.zoom = '';
+          grid.style.width = 'fit-content';
+          grid.style.maxWidth = 'none';
+          var wrapperH = wrapper.clientHeight;
+          var naturalW = grid.scrollWidth;
+          var naturalH = grid.scrollHeight;
+          var containerW = wrapper.clientWidth;
+
+          // Restore width constraint for overflow scrolling
+          grid.style.width = '100%';
+          grid.style.maxWidth = '100%';
+
+          // Compute scale to fit height
+          var scale = (naturalH > 0 && wrapperH > 0) ? (wrapperH / naturalH) * 0.96 : 1;
+          grid.style.zoom = scale.toFixed(4);
+
+          // Check if zoomed width overflows
+          var zoomedW = naturalW * scale;
+          var needsSlider = zoomedW > containerW + 2;
+          if (slider) {
+            slider.style.display = needsSlider ? 'block' : 'none';
+          }
+
+          // Scroll to end (most recent) and sync slider
+          if (needsSlider && slider) {
+            grid.scrollLeft = grid.scrollWidth - grid.clientWidth;
+            slider.value = 100;
+          }
+
+          grid.style.visibility = '';
+        });
+      });
     },
 
     renderMetricChart: function(data, habit) {
       var self = this;
-      var streakStart = self.summary.best_streak_start || null;
-      var streakEnd = self.summary.best_streak_end || null;
+      var range = self._getHighlightRange();
+      var streakStart = range.start;
+      var streakEnd = range.end;
 
-      if (self.chart) {
-        self.chart.destroy();
-        self.chart = null;
-      }
-
-      // Get or recreate canvas
-      var canvas = document.getElementById('stats-chart');
+      var canvas = self._getCanvas();
       if (!canvas) return;
-      if (!canvas.getContext('2d')) {
-        var parent = canvas.parentNode;
-        var newCanvas = document.createElement('canvas');
-        newCanvas.id = 'stats-chart';
-        parent.replaceChild(newCanvas, canvas);
-        canvas = newCanvas;
-      }
 
       if (data.length === 0) {
-        this.chart = new Chart(canvas, {
+        self.chart = new Chart(canvas, {
           type: 'bar',
           data: { labels: ['No data yet'], datasets: [{ data: [0] }] },
           options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: { y: { display: false }, x: { ticks: { color: '#8b949e' } } }
           }
@@ -399,7 +579,7 @@ function statsPage(defaultHabitId) {
           metricVals.push(null);
         }
         var ds = data[i].log_date;
-        inStreak.push(self.highlightStreak && streakStart && streakEnd && ds >= streakStart && ds <= streakEnd);
+        inStreak.push(self.highlightMode && streakStart && streakEnd && ds >= streakStart && ds <= streakEnd);
       }
 
       var cs = getComputedStyle(document.body);
@@ -423,30 +603,20 @@ function statsPage(defaultHabitId) {
         }
       }
 
-      // Point styling based on streak highlight
       var pointBg = [];
       var pointR = [];
-      var borderColors = [];
       for (var pi = 0; pi < metricVals.length; pi++) {
-        if (self.highlightStreak) {
-          if (inStreak[pi]) {
-            pointBg.push(themeColor);
-            pointR.push(6);
-            borderColors.push(themeColor);
-          } else {
-            pointBg.push('rgba(100,100,100,0.3)');
-            pointR.push(2);
-            borderColors.push('rgba(100,100,100,0.3)');
-          }
+        if (self.highlightMode) {
+          pointBg.push(inStreak[pi] ? themeColor : 'rgba(100,100,100,0.3)');
+          pointR.push(inStreak[pi] ? 6 : 2);
         } else {
           pointBg.push(themeColor);
           pointR.push(3);
-          borderColors.push(themeColor);
         }
       }
 
-      var lineColor = self.highlightStreak ? 'rgba(100,100,100,0.25)' : themeColor;
-      var fillColor = self.highlightStreak ? 'rgba(100,100,100,0.05)' : bgColor;
+      var lineColor = self.highlightMode ? 'rgba(100,100,100,0.25)' : themeColor;
+      var fillColor = self.highlightMode ? 'rgba(100,100,100,0.05)' : bgColor;
 
       var datasets = [{
         label: habit.metric_unit || 'Value',
@@ -459,16 +629,12 @@ function statsPage(defaultHabitId) {
         pointBorderColor: pointBg,
         pointRadius: pointR,
         spanGaps: true,
-        segment: self.highlightStreak ? {
+        segment: self.highlightMode ? {
           borderColor: function(ctx) {
-            var i1 = ctx.p0DataIndex;
-            var i2 = ctx.p1DataIndex;
-            return (inStreak[i1] && inStreak[i2]) ? themeColor : 'rgba(100,100,100,0.25)';
+            return (inStreak[ctx.p0DataIndex] && inStreak[ctx.p1DataIndex]) ? themeColor : 'rgba(100,100,100,0.25)';
           },
           backgroundColor: function(ctx) {
-            var i1 = ctx.p0DataIndex;
-            var i2 = ctx.p1DataIndex;
-            return (inStreak[i1] && inStreak[i2]) ? bgColor : 'rgba(100,100,100,0.05)';
+            return (inStreak[ctx.p0DataIndex] && inStreak[ctx.p1DataIndex]) ? bgColor : 'rgba(100,100,100,0.05)';
           }
         } : undefined
       }];
@@ -487,7 +653,7 @@ function statsPage(defaultHabitId) {
         });
       }
 
-      this.chart = new Chart(canvas, {
+      self.chart = new Chart(canvas, {
         type: 'line',
         data: { labels: labels, datasets: datasets },
         options: {
