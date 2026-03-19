@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+{% set active_tab = "stats" %}
+
+{% block content %}
+<div class="stats-container">
+  <h2 class="section-title">Stats</h2>
+
+  {% if habits %}
+  <div x-data="statsPage('{{ habits[0].id }}')">
+
+    <!-- Summary cards -->
+    <div class="stats-summary-row" x-show="overviewLoaded" x-cloak>
+      <div class="stat-card">
+        <div class="stat-card-value accent" x-text="overview.overall_rate + '%'"></div>
+        <div class="stat-card-label">Overall (30d)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-value" x-text="summary.current_streak"></div>
+        <div class="stat-card-label">Current Streak</div>
+      </div>
+      <div class="stat-card stat-card-clickable" :class="highlightStreak ? 'stat-card-active' : ''"
+           @click="toggleStreakHighlight()">
+        <div class="stat-card-value" x-text="summary.best_streak"></div>
+        <div class="stat-card-label">Best Streak</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-value" x-text="summary.completion_rate + '%'"></div>
+        <div class="stat-card-label">Completion Rate</div>
+      </div>
+      <template x-if="summary.metric">
+        <div class="stat-card">
+          <div class="stat-card-value" x-text="summary.metric.avg"></div>
+          <div class="stat-card-label">Avg <span x-text="habitUnit"></span></div>
+        </div>
+      </template>
+      <template x-if="summary.metric">
+        <div class="stat-card">
+          <div class="stat-card-value accent" x-text="summary.metric.best"></div>
+          <div class="stat-card-label">Best <span x-text="habitUnit"></span></div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Chart -->
+    <div class="stats-controls">
+      <div class="stats-selectors">
+        <select class="form-select" x-model="habitId" @change="loadChart()">
+          {% for h in habits %}
+          <option value="{{ h.id }}">{{ h.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="window-btns">
+          {% for w in ['7d', '30d', '90d', 'all'] %}
+          <button class="window-btn" :class="timeWindow === '{{ w }}' ? 'active' : ''"
+                  @click="timeWindow = '{{ w }}'; loadChart()">{{ w }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="chart-wrapper">
+        <div class="chart-loading" x-show="loading" x-transition>Loading...</div>
+        <canvas id="stats-chart" x-show="hasMetric" x-cloak></canvas>
+        <div class="heatmap-container" x-show="!hasMetric" x-cloak>
+          <div class="heatmap-months" x-ref="heatmapMonths"></div>
+          <div class="heatmap-grid" x-ref="heatmapGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rankings & day-of-week -->
+    <div class="stats-two-col" x-show="overviewLoaded" x-cloak>
+      <div class="stats-overview-section">
+        <div class="stats-section-title">Habit Ranking (30d)</div>
+        <div class="habit-rank-list">
+          <template x-for="h in overview.habit_rates" :key="h.id">
+            <div class="habit-rank-row">
+              <span class="habit-rank-name" x-text="h.name"></span>
+              <div class="habit-rank-bar-track">
+                <div class="habit-rank-bar-fill" :style="'width:' + h.rate + '%'"></div>
+              </div>
+              <span class="habit-rank-pct" x-text="h.rate + '%'"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+      <div class="stats-overview-section">
+        <div class="stats-section-title">Best Days (90d)</div>
+        <div class="dow-chart">
+          <template x-for="(rate, i) in overview.day_of_week.rates" :key="i">
+            <div class="dow-bar-col">
+              <div class="dow-pct" x-text="rate + '%'"></div>
+              <div class="dow-bar-wrap">
+                <div class="dow-bar" :style="'height:' + Math.max(rate, 3) + '%'"></div>
+              </div>
+              <div class="dow-label" x-text="overview.day_of_week.labels[i]"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  {% else %}
+  <div class="stats-empty">
+    No habits to show stats for. Add some habits first.
+  </div>
+  {% endif %}
+</div>
+
+<script>
+Chart.defaults.animation = false;
+function statsPage(defaultHabitId) {
+  return {
+    habitId: defaultHabitId,
+    timeWindow: '30d',
+    chart: null,
+    hasMetric: false,
+    loading: false,
+    overviewLoaded: false,
+    habitUnit: '',
+    overview: { overall_rate: 0, habit_rates: [], day_of_week: { labels: [], rates: [] } },
+    summary: { current_streak: 0, best_streak: 0, completion_rate: 0, metric: null },
+    highlightStreak: false,
+    _lastJson: null,
+
+    _inited: false,
+    init: function() {
+      if (this._inited) return;
+      this._inited = true;
+      var self = this;
+      self.loadOverview();
+      setTimeout(function() { self.loadChart(); }, 50);
+    },
+
+    loadOverview: function() {
+      var self = this;
+      fetch('/api/stats/overview')
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+          if (j.habit_rates) {
+            self.overview = j;
+            self.overviewLoaded = true;
+          }
+        })
+        .catch(function(e) { console.error('overview error', e); });
+    },
+
+    _loadSeq: 0,
+    loadChart: function() {
+      var self = this;
+      if (!self.habitId) return;
+      self._loadSeq++;
+      var seq = self._loadSeq;
+      self.loading = true;
+      // Destroy existing chart immediately so canvas is free
+      if (self.chart) {
+        self.chart.destroy();
+        self.chart = null;
+      }
+      self.hasMetric = false;
+      fetch('/api/stats/' + self.habitId + '?window=' + self.timeWindow)
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+          // Only render if this is still the latest request
+          if (seq !== self._loadSeq) return;
+          if (j.summary) self.summary = j.summary;
+          self.habitUnit = (j.habit && j.habit.metric_unit) || '';
+          self.renderChart(j);
+          self.loading = false;
+        })
+        .catch(function(e) {
+          console.error('chart error', e);
+          if (seq === self._loadSeq) self.loading = false;
+        });
+    },
+
+    toggleStreakHighlight: function() {
+      var self = this;
+      self.highlightStreak = !self.highlightStreak;
+      if (!self._lastJson) return;
+
+      if (!self.hasMetric) {
+        self.renderHeatmap(
+          (self._lastJson.data || []),
+          self._lastJson.habit
+        );
+        return;
+      }
+
+      // For metric charts, update in place if possible
+      if (self.chart && self._lastJson) {
+        self.chart.destroy();
+        self.chart = null;
+        self.$nextTick(function() {
+          self.renderMetricChart(
+            (self._lastJson.data || []),
+            self._lastJson.habit
+          );
+        });
+      }
+    },
+
+    renderChart: function(json) {
+      var data = (json && json.data) || [];
+      var habit = json && json.habit;
+      if (!habit) return;
+
+      this._lastJson = json;
+      this.highlightStreak = false;
+
+      // Determine if metric habit
+      var isMetric = false;
+      if (habit.metric_enabled) {
+        for (var k = 0; k < data.length; k++) {
+          if (data[k].metric_value !== null && data[k].metric_value !== undefined) {
+            isMetric = true;
+            break;
+          }
+        }
+      }
+      this.hasMetric = isMetric;
+
+      if (isMetric) {
+        this.renderMetricChart(data, habit);
+      } else {
+        this.renderHeatmap(data, habit);
+      }
+    },
+
+    renderHeatmap: function(data, habit) {
+      var self = this;
+      var streakStart = self.summary.best_streak_start || null;
+      var streakEnd = self.summary.best_streak_end || null;
+      // Build lookup of log_date -> completed
+      var dateMap = {};
+      for (var i = 0; i < data.length; i++) {
+        dateMap[data[i].log_date] = data[i].completed;
+      }
+
+      // Determine date range
+      var windows = { '7d': 7, '30d': 30, '90d': 90, 'all': 365 };
+      var numDays = windows[self.timeWindow] || 30;
+      if (self.timeWindow === 'all' && data.length > 0) {
+        var earliest = new Date(data[0].log_date + 'T12:00:00');
+        var today = new Date();
+        numDays = Math.ceil((today - earliest) / 86400000) + 1;
+        if (numDays < 30) numDays = 30;
+        if (numDays > 365) numDays = 365;
+      }
+
+      var today = new Date();
+      today.setHours(12, 0, 0, 0);
+      var cs = getComputedStyle(document.body);
+      var themeColor = cs.getPropertyValue('--theme').trim();
+
+      // Generate all days in range
+      var days = [];
+      for (var d = numDays - 1; d >= 0; d--) {
+        var dt = new Date(today);
+        dt.setDate(dt.getDate() - d);
+        var iso = dt.getFullYear() + '-' +
+          String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+          String(dt.getDate()).padStart(2, '0');
+        days.push({
+          date: dt,
+          iso: iso,
+          dow: dt.getDay(),
+          completed: dateMap[iso] === true,
+          missed: dateMap[iso] === false,
+          noLog: !(iso in dateMap)
+        });
+      }
+
+      // Build the grid: columns are weeks, rows are days of week (Sun=0 .. Sat=6)
+      // Pad the start so the first column aligns to the correct day of week
+      var startDow = days[0].dow;
+      var grid = self.$refs.heatmapGrid;
+      var monthsEl = self.$refs.heatmapMonths;
+      if (!grid) return;
+
+      var html = '';
+      var monthHtml = '';
+      var dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+      // Day labels column
+      html += '<div class="heatmap-day-labels">';
+      for (var dl = 0; dl < 7; dl++) {
+        html += '<div class="heatmap-day-label">' + (dl % 2 === 1 ? dayLabels[dl] : '') + '</div>';
+      }
+      html += '</div>';
+
+      // Add empty cells for padding at start
+      var cells = [];
+      for (var p = 0; p < startDow; p++) {
+        cells.push({ empty: true });
+      }
+      for (var c = 0; c < days.length; c++) {
+        cells.push(days[c]);
+      }
+
+      // Render week columns
+      var totalWeeks = Math.ceil(cells.length / 7);
+      var lastMonth = -1;
+      var monthPositions = [];
+
+      for (var w = 0; w < totalWeeks; w++) {
+        html += '<div class="heatmap-week">';
+        for (var row = 0; row < 7; row++) {
+          var idx = w * 7 + row;
+          if (idx >= cells.length || cells[idx].empty) {
+            html += '<div class="heatmap-cell empty"></div>';
+          } else {
+            var cell = cells[idx];
+            var cls = 'heatmap-cell';
+            if (cell.completed) cls += ' done';
+            else if (cell.missed) cls += ' missed';
+            else cls += ' no-log';
+            // Highlight best streak range
+            if (self.highlightStreak && streakStart && streakEnd && cell.iso >= streakStart && cell.iso <= streakEnd) {
+              cls += ' streak-highlight';
+            } else if (self.highlightStreak) {
+              cls += ' streak-dim';
+            }
+            var label = cell.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            var status = cell.completed ? 'Done' : (cell.missed ? 'Missed' : 'No log');
+            html += '<div class="' + cls + '" title="' + label + ' — ' + status + '"></div>';
+
+            // Track month boundaries
+            var m = cell.date.getMonth();
+            if (m !== lastMonth) {
+              monthPositions.push({ week: w, month: cell.date.toLocaleDateString('en-US', { month: 'short' }) });
+              lastMonth = m;
+            }
+          }
+        }
+        html += '</div>';
+      }
+
+      grid.innerHTML = html;
+
+      // Month labels
+      monthHtml = '<div class="heatmap-day-labels-spacer"></div>';
+      var prevEnd = 0;
+      for (var mi = 0; mi < monthPositions.length; mi++) {
+        var mp = monthPositions[mi];
+        var nextWeek = (mi + 1 < monthPositions.length) ? monthPositions[mi + 1].week : totalWeeks;
+        var span = nextWeek - mp.week;
+        monthHtml += '<div class="heatmap-month-label" style="grid-column: span ' + span + '">' + mp.month + '</div>';
+      }
+      if (monthsEl) monthsEl.innerHTML = monthHtml;
+    },
+
+    renderMetricChart: function(data, habit) {
+      var self = this;
+      var streakStart = self.summary.best_streak_start || null;
+      var streakEnd = self.summary.best_streak_end || null;
+
+      if (self.chart) {
+        self.chart.destroy();
+        self.chart = null;
+      }
+
+      // Get or recreate canvas
+      var canvas = document.getElementById('stats-chart');
+      if (!canvas) return;
+      if (!canvas.getContext('2d')) {
+        var parent = canvas.parentNode;
+        var newCanvas = document.createElement('canvas');
+        newCanvas.id = 'stats-chart';
+        parent.replaceChild(newCanvas, canvas);
+        canvas = newCanvas;
+      }
+
+      if (data.length === 0) {
+        this.chart = new Chart(canvas, {
+          type: 'bar',
+          data: { labels: ['No data yet'], datasets: [{ data: [0] }] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { display: false }, x: { ticks: { color: '#8b949e' } } }
+          }
+        });
+        return;
+      }
+
+      var labels = [];
+      var metricVals = [];
+      var validVals = [];
+      var inStreak = [];
+      for (var i = 0; i < data.length; i++) {
+        var dt = new Date(data[i].log_date + 'T12:00:00');
+        labels.push(dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+        var mv = data[i].metric_value;
+        if (mv !== null && mv !== undefined) {
+          metricVals.push(mv);
+          validVals.push(mv);
+        } else {
+          metricVals.push(null);
+        }
+        var ds = data[i].log_date;
+        inStreak.push(self.highlightStreak && streakStart && streakEnd && ds >= streakStart && ds <= streakEnd);
+      }
+
+      var cs = getComputedStyle(document.body);
+      var themeColor = cs.getPropertyValue('--theme').trim();
+      var themeDim = cs.getPropertyValue('--theme-dim').trim();
+
+      var maxV = 0;
+      for (var v = 0; v < validVals.length; v++) {
+        if (validVals[v] > maxV) maxV = validVals[v];
+      }
+      var goalV = habit.metric_default || 0;
+      var yTop = Math.ceil(Math.max(maxV, goalV) * 1.25) || 10;
+
+      var bgColor = 'rgba(100, 100, 100, 0.15)';
+      if (themeDim && themeDim.length >= 7) {
+        var r = parseInt(themeDim.slice(1, 3), 16);
+        var g = parseInt(themeDim.slice(3, 5), 16);
+        var b = parseInt(themeDim.slice(5, 7), 16);
+        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+          bgColor = 'rgba(' + r + ',' + g + ',' + b + ',0.15)';
+        }
+      }
+
+      // Point styling based on streak highlight
+      var pointBg = [];
+      var pointR = [];
+      var borderColors = [];
+      for (var pi = 0; pi < metricVals.length; pi++) {
+        if (self.highlightStreak) {
+          if (inStreak[pi]) {
+            pointBg.push(themeColor);
+            pointR.push(6);
+            borderColors.push(themeColor);
+          } else {
+            pointBg.push('rgba(100,100,100,0.3)');
+            pointR.push(2);
+            borderColors.push('rgba(100,100,100,0.3)');
+          }
+        } else {
+          pointBg.push(themeColor);
+          pointR.push(3);
+          borderColors.push(themeColor);
+        }
+      }
+
+      var lineColor = self.highlightStreak ? 'rgba(100,100,100,0.25)' : themeColor;
+      var fillColor = self.highlightStreak ? 'rgba(100,100,100,0.05)' : bgColor;
+
+      var datasets = [{
+        label: habit.metric_unit || 'Value',
+        data: metricVals,
+        borderColor: lineColor,
+        backgroundColor: fillColor,
+        tension: 0.35,
+        fill: true,
+        pointBackgroundColor: pointBg,
+        pointBorderColor: pointBg,
+        pointRadius: pointR,
+        spanGaps: true,
+        segment: self.highlightStreak ? {
+          borderColor: function(ctx) {
+            var i1 = ctx.p0DataIndex;
+            var i2 = ctx.p1DataIndex;
+            return (inStreak[i1] && inStreak[i2]) ? themeColor : 'rgba(100,100,100,0.25)';
+          },
+          backgroundColor: function(ctx) {
+            var i1 = ctx.p0DataIndex;
+            var i2 = ctx.p1DataIndex;
+            return (inStreak[i1] && inStreak[i2]) ? bgColor : 'rgba(100,100,100,0.05)';
+          }
+        } : undefined
+      }];
+
+      if (goalV > 0) {
+        var goalLine = [];
+        for (var gl = 0; gl < labels.length; gl++) goalLine.push(goalV);
+        datasets.push({
+          label: 'Goal',
+          data: goalLine,
+          borderColor: '#8b949e',
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false
+        });
+      }
+
+      this.chart = new Chart(canvas, {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { color: '#c9d1d9' } },
+            tooltip: {
+              backgroundColor: '#161b22',
+              borderColor: '#30363d',
+              borderWidth: 1,
+              titleColor: '#c9d1d9',
+              bodyColor: '#8b949e'
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#8b949e', maxTicksLimit: 12, maxRotation: 0 },
+              grid: { color: '#21262d' }
+            },
+            y: {
+              min: 0,
+              suggestedMax: yTop,
+              ticks: { color: '#8b949e' },
+              grid: { color: '#21262d' },
+              title: { display: true, text: habit.metric_unit || '', color: '#8b949e' }
+            }
+          }
+        }
+      });
+    }
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Habits</title>
+
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css?v={{ range(100000) | random }}" />
+</head>
+<body data-theme="{{ user.theme_color or 'green' if user else 'green' }}">
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="header-title">
+        <span class="header-icon">&#9670;</span>
+        <h1>Habits</h1>
+      </div>
+      <nav class="main-nav">
+        <a href="/app" class="nav-link {% if active_tab == 'today' %}active{% endif %}">Today</a>
+        <a href="/todos" class="nav-link {% if active_tab == 'todos' %}active{% endif %}">Todos</a>
+        <a href="/trackers" class="nav-link {% if active_tab == 'trackers' %}active{% endif %}">Trackers</a>
+        <a href="/stats" class="nav-link {% if active_tab == 'stats' %}active{% endif %}">Stats</a>
+        <a href="/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}">Settings</a>
+      </nav>
+      <div class="header-right">
+        <span class="header-date">{{ display_date }}</span>
+        {% if user %}
+        <div class="profile-dropdown" x-data="{ open: false }">
+          <button class="profile-btn" @click="open = !open" @click.outside="open = false">
+            <span class="profile-avatar">{{ user.name[0] | upper }}</span>
+            <span class="profile-name">{{ user.name }}</span>
+            <span class="profile-caret">&#9662;</span>
+          </button>
+          <div class="profile-menu" x-show="open" x-transition x-cloak>
+            <div class="profile-menu-header">
+              <span class="profile-menu-name">{{ user.name }}</span>
+              {% if is_guest %}
+              <span class="profile-menu-badge">Guest</span>
+              {% endif %}
+            </div>
+            <div class="profile-menu-divider"></div>
+            {% if is_guest %}
+            <a href="/login" class="profile-menu-item">Sign in with Google</a>
+            {% endif %}
+            <a href="/settings" class="profile-menu-item">Settings</a>
+            <a href="/logout" class="profile-menu-item danger-text">Log out</a>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/app.js?v={{ range(100000) | random }}"></script>
+</body>
+</html>

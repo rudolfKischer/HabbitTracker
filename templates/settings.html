@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set active_tab = "settings" %}
+
+{% block content %}
+<div class="settings-container">
+  <h2 class="section-title">Settings</h2>
+
+  <!-- Categories -->
+  <div class="categories-section">
+    <h3 class="section-title" style="font-size: 15px;">Categories</h3>
+    <div id="categories-list">
+      {% include "partials/category_list.html" %}
+    </div>
+    <form class="category-add-form" method="post" action="/categories" style="display: flex; gap: 8px; margin-top: 12px;">
+      <input type="text" name="name" class="form-input" placeholder="New category name" required style="flex:1" />
+      <button type="submit" class="btn-primary">Add</button>
+    </form>
+  </div>
+
+  <!-- Theme color -->
+  <div class="theme-section">
+    <h3 class="section-title" style="margin-top: 40px; font-size: 15px;">Theme Color</h3>
+    <div class="theme-picker" x-data="{ current: '{{ user.theme_color or 'green' }}' }">
+      {% for color in ['green', 'teal', 'cyan', 'blue', 'purple', 'pink', 'orange', 'yellow'] %}
+      <button class="theme-swatch theme-swatch-{{ color }}"
+              :class="current === '{{ color }}' ? 'theme-active' : ''"
+              hx-post="/settings/theme"
+              hx-vals='{"color": "{{ color }}"}'
+              hx-swap="none"
+              @click="current = '{{ color }}'; document.body.setAttribute('data-theme', '{{ color }}')"
+              title="{{ color | capitalize }}">
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Demo / Test Data -->
+  <div class="demo-data-section">
+    <h3 class="section-title" style="margin-top: 40px; font-size: 15px;">Test Data</h3>
+    <div class="demo-data-actions">
+      <form method="post" action="/settings/load-demo" style="display:inline">
+        <button type="submit" class="btn-secondary"
+                onclick="return confirm('This will clear all your data and load demo habits + history. Continue?')">
+          Load Demo Data
+        </button>
+      </form>
+      <form method="post" action="/settings/clear-data" style="display:inline">
+        <button type="submit" class="btn-secondary danger-text"
+                onclick="return confirm('This will delete ALL your habits and logs. Continue?')">
+          Clear All Data
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

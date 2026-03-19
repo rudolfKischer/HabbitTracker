@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+{% set active_tab = "today" %}
+
+{% block content %}
+<div class="today-container">
+
+  <!-- Date navigation -->
+  <div class="date-nav">
+    <a href="/app?date={{ prev_date }}" class="date-nav-btn">&larr;</a>
+    <span class="date-nav-label">{{ display_date }}</span>
+    {% if next_date %}
+    <a href="/app?date={{ next_date }}" class="date-nav-btn">&rarr;</a>
+    {% else %}
+    <span class="date-nav-btn disabled">&rarr;</span>
+    {% endif %}
+  </div>
+
+  <div class="progress-header" id="progress-header">
+    <div class="progress-label">
+      <span class="progress-count">
+        <span id="done-count">{{ summary.done }}</span> / <span id="total-count">{{ summary.total }}</span>
+      </span>
+      <span class="progress-text">completed</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-bar"
+           style="width: {{ (summary.done / summary.total * 100) | round if summary.total > 0 else 0 }}%"></div>
+    </div>
+  </div>
+
+  {% if habit_groups %}
+  {% for group in habit_groups %}
+  {% set incomplete = group.habits | rejectattr("completed") | list %}
+  {% set all_done = (incomplete | length == 0 and group.habits | length > 0) %}
+  <div class="category-card{% if all_done %} category-all-done{% endif %}"
+       data-category-id="{{ group.category.id if group.category else 'none' }}">
+    {% if group.category %}
+    <div class="category-card-header">
+      <span class="category-card-drag-handle" title="Drag to reorder">&#8942;&#8942;</span>
+      <div class="category-card-title">{{ group.category.name }}</div>
+    </div>
+    {% endif %}
+
+    <div class="habits-list" id="habits-incomplete-cat-{{ group.category.id if group.category else 'none' }}">
+      {% for habit in incomplete %}
+        {% include "partials/habit_row.html" %}
+      {% endfor %}
+    </div>
+    {% if not group.category %}
+    <div class="habit-add-inline" x-data="{ adding: false, name: '' }">
+      <button class="habit-add-btn" x-show="!adding" @click="adding = true; $nextTick(() => $refs.nameInput.focus())">+</button>
+      <form x-show="adding" x-cloak class="habit-add-form" method="post" action="/habits/quick"
+            @submit="if(!name.trim()){$event.preventDefault()}">
+        <input type="text" name="name" class="form-input habit-add-input" x-model="name" x-ref="nameInput"
+               placeholder="New habit..." @keydown.escape="adding = false" />
+        <button type="submit" class="btn-primary habit-add-submit">Add</button>
+        <button type="button" class="btn-secondary" @click="adding = false; name = ''">&times;</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% set done_habits = habits | selectattr("completed") | list %}
+  {% if done_habits %}
+  <div class="habits-done-section" id="habits-complete">
+    <div class="habits-done-label">Completed</div>
+    {% for habit in done_habits %}
+      {% include "partials/habit_row.html" %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="habits-done-section" id="habits-complete" style="display:none"></div>
+  {% endif %}
+  {% else %}
+  <div class="category-card">
+    <div class="stats-empty" style="margin-bottom: 8px">
+      No habits yet. Add one below to get started.
+    </div>
+    <div class="habit-add-inline" x-data="{ adding: false, name: '' }">
+      <button class="habit-add-btn" x-show="!adding" @click="adding = true; $nextTick(() => $refs.nameInput.focus())">+</button>
+      <form x-show="adding" x-cloak class="habit-add-form" method="post" action="/habits/quick">
+        <input type="text" name="name" class="form-input habit-add-input" x-model="name" x-ref="nameInput"
+               placeholder="New habit..." @keydown.escape="adding = false" />
+        <button type="submit" class="btn-primary habit-add-submit">Add</button>
+        <button type="button" class="btn-secondary" @click="adding = false; name = ''">&times;</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if week and week.habits %}
+  <section class="week-overview-section">
+    <h2 class="section-title">Week Overview</h2>
+    <div id="week-grid-container">
+      {% include "partials/week_grid.html" %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="heatmap-section">
+    <h2 class="section-title">Year Overview</h2>
+    <div id="heatmap-container" class="heatmap-container">
+      <div class="heatmap-loading">Loading heatmap...</div>
+    </div>
+    <div class="heatmap-legend">
+      <span class="legend-label">Less</span>
+      <div class="legend-cell" style="background:#161b22"></div>
+      <div class="legend-cell" style="background:var(--theme-darker)"></div>
+      <div class="legend-cell" style="background:var(--theme-dark)"></div>
+      <div class="legend-cell" style="background:var(--theme-dim)"></div>
+      <div class="legend-cell" style="background:var(--theme)"></div>
+      <span class="legend-label">More</span>
+    </div>
+  </section>
+
+</div>
+
+<!-- Habit edit modal -->
+<div id="habit-edit-overlay" class="habit-edit-overlay" style="display:none" onclick="if(event.target===this)closeHabitEditor()">
+  <div class="habit-edit-panel" x-data="{
+    id: null, name: '', description: '', category_id: '',
+    metric_enabled: false, metric_unit: '', metric_default: '', metric_max: '', metric_step: '0.5',
+    saving: false,
+
+    async save() {
+      this.saving = true;
+      const body = new URLSearchParams({
+        name: this.name,
+        description: this.description,
+        metric_enabled: this.metric_enabled ? 'on' : '',
+        metric_unit: this.metric_unit,
+        metric_default: this.metric_default,
+        metric_max: this.metric_max,
+        metric_step: this.metric_step,
+        log_date: '{{ log_date }}',
+      });
+      await fetch('/habits/' + this.id, { method: 'PUT', body });
+      if (this.category_id !== undefined) {
+        const catBody = new URLSearchParams({ category_id: this.category_id || '' });
+        await fetch('/habits/' + this.id + '/category', { method: 'POST', body: catBody });
+      }
+      this.saving = false;
+      closeHabitEditor();
+      window.location.reload();
+    },
+
+    async remove() {
+      if (!confirm('Delete this habit permanently?')) return;
+      await fetch('/habits/' + this.id, { method: 'DELETE' });
+      closeHabitEditor();
+      window.location.reload();
+    }
+  }">
+    <div class="habit-edit-header">
+      <h3>Edit Habit</h3>
+      <button class="habit-edit-close" onclick="closeHabitEditor()">&times;</button>
+    </div>
+    <div class="habit-edit-body">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" x-model="name" />
+
+      <label class="form-label">Description</label>
+      <input type="text" class="form-input" x-model="description" placeholder="Optional" />
+
+      <label class="form-label">Category</label>
+      <select class="form-select" x-model="category_id">
+        <option value="">Uncategorized</option>
+        {% for cat in categories %}
+        <option value="{{ cat.id }}">{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+
+      <label class="habit-edit-toggle">
+        <input type="checkbox" x-model="metric_enabled" />
+        <span class="habit-edit-toggle-track"></span>
+        Metric tracking
+      </label>
+
+      <div x-show="metric_enabled" x-cloak class="habit-edit-metric-fields">
+        <div class="habit-edit-metric-row">
+          <div>
+            <label class="form-label">Unit</label>
+            <input type="text" class="form-input" x-model="metric_unit" placeholder="e.g. km" />
+          </div>
+          <div>
+            <label class="form-label">Goal</label>
+            <input type="number" step="any" class="form-input" x-model="metric_default" />
+          </div>
+        </div>
+        <div class="habit-edit-metric-row">
+          <div>
+            <label class="form-label">Max</label>
+            <input type="number" step="any" class="form-input" x-model="metric_max" />
+          </div>
+          <div>
+            <label class="form-label">Step</label>
+            <input type="number" step="any" class="form-input" x-model="metric_step" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="habit-edit-footer">
+      <button class="btn-danger" @click="remove()">Delete Habit</button>
+      <div class="habit-edit-footer-right">
+        <button class="btn-secondary" onclick="closeHabitEditor()" style="font-size:15px;padding:10px 18px">Cancel</button>
+        <button class="btn-primary" @click="save()" :disabled="saving" x-text="saving ? 'Saving...' : 'Save'" style="font-size:15px;padding:10px 20px"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(async function() {
+  const resp = await fetch('/api/heatmap');
+  const data = await resp.json();
+  const container = document.getElementById('heatmap-container');
+  container.innerHTML = '';
+
+  const CELL = 14, GAP = 3, ROWS = 7, LEFT_OFFSET = 30, TOP_OFFSET = 22;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - 364);
+  startDate.setDate(startDate.getDate() - startDate.getDay());
+
+  const totalDays = Math.ceil((today - startDate) / 86400000) + 1;
+  const totalCols = Math.ceil(totalDays / 7);
+
+  const svgW = LEFT_OFFSET + totalCols * (CELL + GAP);
+  const svgH = TOP_OFFSET + ROWS * (CELL + GAP) + 10;
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("width", svgW);
+  svg.setAttribute("height", svgH);
+  svg.setAttribute("class", "heatmap-svg");
+
+  const cs = getComputedStyle(document.body);
+  const heatColors = [
+    '#161b22',
+    cs.getPropertyValue('--theme-darker').trim(),
+    cs.getPropertyValue('--theme-dark').trim(),
+    cs.getPropertyValue('--theme-dim').trim(),
+    cs.getPropertyValue('--theme').trim(),
+  ];
+  function pctToColor(pct) {
+    if (pct === undefined || pct === null || pct === 0) return heatColors[0];
+    if (pct <= 25) return heatColors[1];
+    if (pct <= 50) return heatColors[2];
+    if (pct <= 75) return heatColors[3];
+    return heatColors[4];
+  }
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DAYS = ['','Mon','','Wed','','Fri',''];
+
+  let lastMonth = -1;
+  for (let col = 0; col < totalCols; col++) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + col * 7);
+    if (d.getMonth() !== lastMonth) {
+      lastMonth = d.getMonth();
+      const text = document.createElementNS(svgNS, "text");
+      text.setAttribute("x", LEFT_OFFSET + col * (CELL + GAP));
+      text.setAttribute("y", TOP_OFFSET - 5);
+      text.setAttribute("class", "heatmap-label");
+      text.textContent = MONTHS[d.getMonth()];
+      svg.appendChild(text);
+    }
+  }
+
+  for (let row = 0; row < ROWS; row++) {
+    if (DAYS[row]) {
+      const text = document.createElementNS(svgNS, "text");
+      text.setAttribute("x", 0);
+      text.setAttribute("y", TOP_OFFSET + row * (CELL + GAP) + CELL - 2);
+      text.setAttribute("class", "heatmap-label");
+      text.textContent = DAYS[row];
+      svg.appendChild(text);
+    }
+  }
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'heatmap-tooltip';
+  tooltip.style.display = 'none';
+  container.appendChild(tooltip);
+
+  for (let col = 0; col < totalCols; col++) {
+    for (let row = 0; row < ROWS; row++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + col * 7 + row);
+      if (d > today) continue;
+
+      const dateStr = d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+      const pct = data[dateStr];
+
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", LEFT_OFFSET + col * (CELL + GAP));
+      rect.setAttribute("y", TOP_OFFSET + row * (CELL + GAP));
+      rect.setAttribute("width", CELL);
+      rect.setAttribute("height", CELL);
+      rect.setAttribute("rx", 3);
+      rect.setAttribute("fill", pctToColor(pct));
+      rect.setAttribute("class", "heatmap-cell");
+      rect.dataset.date = dateStr;
+      rect.dataset.pct = pct !== undefined ? pct : '';
+
+      // Click to navigate to that date
+      rect.addEventListener('click', function() {
+        window.location.href = '/app?date=' + this.dataset.date;
+      });
+
+      rect.addEventListener('mouseenter', function() {
+        const p = this.dataset.pct;
+        const label = p !== '' ? p + '% done' : 'No data';
+        const dd = new Date(this.dataset.date + 'T12:00:00');
+        const displayDate = dd.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+        tooltip.textContent = displayDate + ' \u2014 ' + label;
+        tooltip.style.display = 'block';
+      });
+      rect.addEventListener('mousemove', function(e) {
+        const bounding = container.getBoundingClientRect();
+        tooltip.style.left = (e.clientX - bounding.left + 12) + 'px';
+        tooltip.style.top = (e.clientY - bounding.top - 28) + 'px';
+      });
+      rect.addEventListener('mouseleave', function() {
+        tooltip.style.display = 'none';
+      });
+
+      svg.appendChild(rect);
+    }
+  }
+
+  container.appendChild(svg);
+})();
+</script>
+{% endblock %}

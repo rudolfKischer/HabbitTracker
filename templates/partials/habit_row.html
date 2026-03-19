@@ -1,0 +1,65 @@
+{% set pct = habit.completion_pct | default(0) %}
+{% if pct == 0 %}{% set heat_class = '' %}
+{% elif pct <= 25 %}{% set heat_class = 'heat-1' %}
+{% elif pct <= 50 %}{% set heat_class = 'heat-2' %}
+{% elif pct <= 75 %}{% set heat_class = 'heat-3' %}
+{% else %}{% set heat_class = 'heat-4' %}{% endif %}
+
+<div class="habit-row" id="habit-{{ habit.id }}"
+     data-category-id="{{ habit.category_id or '' }}"
+     x-data="{ open: false }">
+  <div class="habit-main">
+    <span class="habit-drag-handle" title="Drag to reorder">&#8942;&#8942;</span>
+    <form style="display:contents">
+      <input type="hidden" name="log_date" value="{{ log_date }}" />
+      <button
+        class="checkbox-box {% if habit.completed %}{{ heat_class }} checked{% endif %}"
+        hx-post="/habits/{{ habit.id }}/toggle"
+        hx-target="#habit-{{ habit.id }}"
+        hx-swap="outerHTML"
+        hx-include="previous input"
+        onclick="playCheckSound({{ 'false' if habit.completed else 'true' }})"
+      ></button>
+    </form>
+
+    <span class="habit-name {% if habit.completed %}done{% endif %}">{{ habit.name }}</span>
+
+    {% if habit.metric_enabled %}
+    <span class="metric-badge">
+      {% if habit.metric_value is not none %}
+        {{ habit.metric_value | int if habit.metric_value == habit.metric_value | int else habit.metric_value }}
+        /
+        {{ habit.metric_default | int if habit.metric_default and habit.metric_default == habit.metric_default | int else habit.metric_default }}
+        {{ habit.metric_unit }}
+      {% else %}
+        {{ habit.metric_unit }}
+      {% endif %}
+    </span>
+    {% endif %}
+
+    <button class="habit-edit-btn" onclick="openHabitEditor({{ habit.id }})" title="Edit habit">&#9998;</button>
+
+    {% if habit.metric_enabled %}
+    <button class="expand-btn" @click="open = !open"
+            hx-get="/habits/{{ habit.id }}/detail?log_date={{ log_date }}"
+            hx-target="#habit-{{ habit.id }}-detail"
+            hx-swap="innerHTML"
+            hx-trigger="click once">
+      <span class="arrow-indicator" :class="open ? 'arrow-up' : 'arrow-down'">&#9662;</span>
+    </button>
+    {% endif %}
+  </div>
+
+  {% if habit.metric_enabled %}
+  <div class="habit-detail-panel" id="habit-{{ habit.id }}-detail"
+       x-show="open"
+       x-transition:enter="detail-enter"
+       x-transition:enter-start="detail-enter-start"
+       x-transition:enter-end="detail-enter-end"
+       x-transition:leave="detail-leave"
+       x-transition:leave-start="detail-leave-start"
+       x-transition:leave-end="detail-leave-end"
+       x-cloak>
+  </div>
+  {% endif %}
+</div>

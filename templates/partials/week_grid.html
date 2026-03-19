@@ -1,0 +1,58 @@
+<!-- Week navigation -->
+<div class="week-nav">
+  <a href="#" class="date-nav-btn"
+     hx-get="/app/week?week={{ week.prev_week }}"
+     hx-target="#week-grid-container"
+     hx-swap="innerHTML">&larr;</a>
+  <span class="week-nav-label">
+    {{ week.dates[0][-5:] | replace('-',' / ') }} &ndash; {{ week.dates[6][-5:] | replace('-',' / ') }}
+  </span>
+  {% if week.next_week %}
+  <a href="#" class="date-nav-btn"
+     hx-get="/app/week?week={{ week.next_week }}"
+     hx-target="#week-grid-container"
+     hx-swap="innerHTML">&rarr;</a>
+  {% else %}
+  <span class="date-nav-btn disabled">&rarr;</span>
+  {% endif %}
+</div>
+
+<div class="week-grid">
+  <!-- Header row: empty corner + day labels -->
+  <div class="week-corner"></div>
+  {% for d in week.dates %}
+  <a href="/app?date={{ d }}" class="week-day-label {% if d == log_date %}week-day-active{% endif %}">
+    {{ ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d | weekday] }}
+    <span class="week-day-num">{{ d[-2:] | int }}</span>
+  </a>
+  {% endfor %}
+
+  <!-- One row per habit -->
+  {% for habit in week.habits %}
+  <div class="week-habit-name">{{ habit.name }}</div>
+  {% for day in habit.days %}
+  {% if day.pct is none %}
+  {# Habit didn't exist yet on this day — empty placeholder #}
+  <div class="week-cell week-cell-na"></div>
+  {% else %}
+  {% if day.pct == 0 %}{% set cell_heat = '' %}
+  {% elif day.pct <= 25 %}{% set cell_heat = 'heat-1' %}
+  {% elif day.pct <= 50 %}{% set cell_heat = 'heat-2' %}
+  {% elif day.pct <= 75 %}{% set cell_heat = 'heat-3' %}
+  {% else %}{% set cell_heat = 'heat-4' %}{% endif %}
+  <button class="week-cell {{ cell_heat }}" title="{{ day.date }}: {{ day.pct }}%"
+     hx-post="/habits/{{ habit.id }}/week-toggle"
+     hx-vals='{"log_date": "{{ day.date }}", "week": "{{ week.monday }}"}'
+     hx-target="#week-grid-container"
+     hx-swap="innerHTML"
+     onclick="playWeekCellSound({{ 'false' if day.pct > 0 else 'true' }})">
+    {% if day.pct > 0 and habit.metric_enabled and day.metric_value is not none %}
+    <span class="week-cell-val">{{ day.metric_value | int if day.metric_value == day.metric_value | int else day.metric_value }}</span>
+    {% elif day.pct > 0 %}
+    <span class="week-cell-check">&#10003;</span>
+    {% endif %}
+  </button>
+  {% endif %}
+  {% endfor %}
+  {% endfor %}
+</div>

@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% set active_tab = "todos" %}
+{% from "partials/todo_item.html" import render_todo %}
+
+{% block content %}
+<div class="todos-container" x-data="{ viewMode: localStorage.getItem('todoViewMode') || 'list' }"
+     x-init="$watch('viewMode', v => localStorage.setItem('todoViewMode', v))">
+
+  <div class="todos-header">
+    <h2 class="section-title">Todos</h2>
+    <div class="view-toggle">
+      <button class="view-toggle-btn" :class="viewMode === 'list' && 'active'"
+              @click="viewMode = 'list'" title="List view">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <rect x="1" y="2" width="14" height="2.5" rx="1"/>
+          <rect x="1" y="6.75" width="14" height="2.5" rx="1"/>
+          <rect x="1" y="11.5" width="14" height="2.5" rx="1"/>
+        </svg>
+      </button>
+      <button class="view-toggle-btn" :class="viewMode === 'carousel' && 'active'"
+              @click="viewMode = 'carousel'" title="Carousel view">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <rect x="1" y="3" width="3.5" height="10" rx="1" opacity="0.35"/>
+          <rect x="5.5" y="1" width="5" height="14" rx="1.5"/>
+          <rect x="11.5" y="3" width="3.5" height="10" rx="1" opacity="0.35"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- List view -->
+  <div id="todo-list" x-show="viewMode === 'list'">
+    {% include "partials/todo_list.html" %}
+  </div>
+
+  <!-- Carousel view -->
+  <div class="carousel-view" x-show="viewMode === 'carousel'" x-cloak
+       x-data="todoCarousel()" x-init="init()">
+    <div class="carousel-scene" :style="'height:' + sceneHeight + 'px'"
+         @resize.window="updateHeight()">
+      <div class="carousel-track">
+        {% set carousel_groups = [] %}
+        {% if todo_groups is defined and todo_groups %}
+          {% for group in todo_groups %}
+            {% if group.todos.active or group.category %}
+              {% if carousel_groups.append(group) %}{% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+
+        {% for group in carousel_groups %}
+        <div class="carousel-card" data-index="{{ loop.index0 }}"
+             :style="cardStyle({{ loop.index0 }})">
+          <div class="category-card carousel-category-card">
+            <div class="category-card-header">
+              <div class="category-card-title">{{ group.category.name if group.category else 'Uncategorized' }}</div>
+            </div>
+            {% if group.todos.active %}
+            <div class="todo-section">
+              {% for todo in group.todos.active %}
+                {{ render_todo(todo, categories=categories) }}
+              {% endfor %}
+            </div>
+            {% endif %}
+            <button class="todo-add-btn"
+                    hx-post="/todos"
+                    hx-target="#todo-list"
+                    hx-swap="innerHTML"
+                    @click="$nextTick(() => { $dispatch('carousel-refresh') })"
+                    {% if group.category %}hx-vals='{"category_id": "{{ group.category.id }}"}'{% endif %}>+</button>
+            {% if not group.todos.active %}
+            <div class="todo-empty">No active todos</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+
+        {% if not carousel_groups %}
+        <div class="carousel-card" data-index="0">
+          <div class="category-card carousel-category-card">
+            <div class="category-card-header">
+              <div class="category-card-title">Uncategorized</div>
+            </div>
+            <button class="todo-add-btn"
+                    hx-post="/todos"
+                    hx-target="#todo-list"
+                    hx-swap="innerHTML">+</button>
+            <div class="todo-empty">No todos yet.</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="carousel-nav">
+      <button class="carousel-nav-btn" @click="prev()">&larr;</button>
+      <div class="carousel-dots">
+        {% for group in carousel_groups %}
+        <button class="carousel-dot" :class="current === {{ loop.index0 }} && 'active'"
+                @click="goTo({{ loop.index0 }})"></button>
+        {% endfor %}
+        {% if not carousel_groups %}
+        <button class="carousel-dot active"></button>
+        {% endif %}
+      </div>
+      <button class="carousel-nav-btn" @click="next()">&rarr;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Carousel logic ──
+function todoCarousel() {
+  return {
+    current: 0,
+    total: 0,
+    sceneHeight: 400,
+
+    _touchStartX: 0,
+
+    init() {
+      this.total = this.$el.querySelectorAll('.carousel-card').length;
+      this.$nextTick(() => this.updateHeight());
+
+      this._onKey = (e) => {
+        const container = document.querySelector('.todos-container');
+        const data = container._x_dataStack ? Alpine.$data(container) : null;
+        if (!data || data.viewMode !== 'carousel') return;
+        if (e.key === 'ArrowLeft') this.prev();
+        if (e.key === 'ArrowRight') this.next();
+      };
+      document.addEventListener('keydown', this._onKey);
+
+      const scene = this.$el.querySelector('.carousel-scene');
+      scene.addEventListener('touchstart', (e) => {
+        this._touchStartX = e.touches[0].clientX;
+      }, { passive: true });
+      scene.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - this._touchStartX;
+        if (Math.abs(dx) > 50) {
+          dx > 0 ? this.prev() : this.next();
+        }
+      }, { passive: true });
+    },
+
+    updateHeight() {
+      const cards = this.$el.querySelectorAll('.carousel-card');
+      let max = 350;
+      cards.forEach(c => { if (c.scrollHeight > max) max = c.scrollHeight; });
+      this.sceneHeight = max;
+    },
+
+    goTo(i) {
+      if (this.total <= 1) { this.current = 0; return; }
+      this.current = ((i % this.total) + this.total) % this.total;
+    },
+
+    prev() { this.goTo(this.current - 1); },
+    next() { this.goTo(this.current + 1); },
+
+    _ringDiff(index) {
+      if (this.total <= 1) return index - this.current;
+      let d = index - this.current;
+      if (d > this.total / 2) d -= this.total;
+      if (d < -this.total / 2) d += this.total;
+      return d;
+    },
+
+    cardStyle(index) {
+      const scene = this.$el.querySelector('.carousel-scene');
+      const sceneW = scene ? scene.offsetWidth : 600;
+      const cardW = Math.min(600, sceneW * 0.92);
+      const centerX = (sceneW - cardW) / 2;
+
+      // Place cards around a circle: each card gets an angle
+      const anglePerCard = (2 * Math.PI) / this.total;
+      const diff = this._ringDiff(index);
+      const angle = diff * anglePerCard;
+
+      // Radius of the carousel ring (how far cards sit from center)
+      const radius = cardW * 0.6;
+
+      // Project circular position to 2D
+      const x = Math.sin(angle) * radius;        // left-right offset from center
+      const z3d = Math.cos(angle) * radius;       // depth (1=front, -1=back)
+
+      // Normalize depth: front card z3d = radius, back card z3d = -radius
+      const depthNorm = (z3d + radius) / (2 * radius); // 0=back, 1=front
+
+      const scale = 0.5 + depthNorm * 0.5;         // 0.5 at back, 1.0 at front
+      const opacity = 0.15 + depthNorm * 0.85;      // 0.15 at back, 1.0 at front
+      const brightness = 0.4 + depthNorm * 0.6;     // 0.4 at back, 1.0 at front
+      const zIndex = Math.round(depthNorm * 10);
+
+      const left = centerX + x;
+      const isFront = Math.abs(diff) < 0.01;
+      const pointerEvents = isFront ? 'auto' : 'none';
+
+      return `position:absolute; left:${left}px; top:0; width:${cardW}px; transform: scale(${scale.toFixed(3)}); opacity:${opacity.toFixed(2)}; filter:brightness(${brightness.toFixed(2)}); z-index:${zIndex}; pointer-events:${pointerEvents};`;
+    },
+  };
+}
+
+// ── Drag and drop for reparenting / reordering todos ──
+(function() {
+  let dragId = null;
+  let dragEl = null;
+  let dropIndicator = null;
+
+  function getIndicator() {
+    if (!dropIndicator) {
+      dropIndicator = document.createElement('div');
+      dropIndicator.className = 'todo-drop-indicator';
+    }
+    return dropIndicator;
+  }
+
+  function removeIndicator() {
+    if (dropIndicator && dropIndicator.parentNode) {
+      dropIndicator.remove();
+    }
+  }
+
+  document.addEventListener('dragstart', function(e) {
+    const item = e.target.closest('.todo-item');
+    if (!item) return;
+    dragId = item.dataset.todoId;
+    dragEl = item;
+    item.classList.add('todo-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragId);
+  });
+
+  document.addEventListener('dragend', function(e) {
+    if (dragEl) dragEl.classList.remove('todo-dragging');
+    removeIndicator();
+    dragId = null;
+    dragEl = null;
+  });
+
+  document.addEventListener('dragover', function(e) {
+    if (!dragId) return;
+    const item = e.target.closest('.todo-item');
+    if (!item || item.dataset.todoId === dragId) return;
+    // Don't allow dropping onto own descendants
+    if (item.closest('#todo-' + dragId)) return;
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = item.querySelector('.todo-main').getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const h = rect.height;
+    const indicator = getIndicator();
+
+    if (y < h * 0.25) {
+      // Drop BEFORE this item (same level)
+      indicator.dataset.mode = 'before';
+      indicator.dataset.targetId = item.dataset.todoId;
+      indicator.style.left = rect.left + 'px';
+      indicator.style.width = rect.width + 'px';
+      item.querySelector('.todo-main').before(indicator);
+      item.classList.remove('todo-drop-into');
+    } else if (y > h * 0.75) {
+      // Drop AFTER this item (same level)
+      indicator.dataset.mode = 'after';
+      indicator.dataset.targetId = item.dataset.todoId;
+      indicator.style.left = rect.left + 'px';
+      indicator.style.width = rect.width + 'px';
+      item.querySelector('.todo-main').after(indicator);
+      item.classList.remove('todo-drop-into');
+    } else {
+      // Drop INTO this item (make it a child)
+      indicator.dataset.mode = 'into';
+      indicator.dataset.targetId = item.dataset.todoId;
+      removeIndicator();
+      item.classList.add('todo-drop-into');
+    }
+  });
+
+  document.addEventListener('dragleave', function(e) {
+    const item = e.target.closest('.todo-item');
+    if (item) item.classList.remove('todo-drop-into');
+  });
+
+  document.addEventListener('drop', function(e) {
+    if (!dragId) return;
+    e.preventDefault();
+
+    const targetItem = e.target.closest('.todo-item');
+    if (!targetItem || targetItem.dataset.todoId === dragId) return;
+
+    const indicator = getIndicator();
+    const mode = indicator.dataset.mode || 'into';
+    const targetId = indicator.dataset.targetId || targetItem.dataset.todoId;
+
+    // Clean up visual state
+    document.querySelectorAll('.todo-drop-into').forEach(el => el.classList.remove('todo-drop-into'));
+    removeIndicator();
+
+    // Build the move request
+    const formData = new FormData();
+    if (mode === 'into') {
+      formData.set('parent_id', targetId);
+    } else if (mode === 'before') {
+      // Same parent as target, place before it
+      const target = document.querySelector('[data-todo-id="' + targetId + '"]');
+      const parentItem = target ? target.parentElement.closest('.todo-item') : null;
+      if (parentItem) formData.set('parent_id', parentItem.dataset.todoId);
+      formData.set('before_id', targetId);
+    } else {
+      // 'after' — same parent as target, place after (before the next sibling)
+      const target = document.querySelector('[data-todo-id="' + targetId + '"]');
+      const parentItem = target ? target.parentElement.closest('.todo-item') : null;
+      if (parentItem) formData.set('parent_id', parentItem.dataset.todoId);
+      // Find the next sibling todo at the same level
+      let next = target ? target.nextElementSibling : null;
+      while (next && !next.classList.contains('todo-item')) next = next.nextElementSibling;
+      if (next && next.dataset.todoId) formData.set('before_id', next.dataset.todoId);
+    }
+
+    fetch('/todos/' + dragId + '/move', { method: 'POST', body: formData })
+      .then(r => r.text())
+      .then(html => {
+        const list = document.getElementById('todo-list');
+        list.innerHTML = html;
+        htmx.process(list);
+      });
+  });
+})();
+
+// ── Inline editing ──
+document.addEventListener('dblclick', function(e) {
+  const titleEl = e.target.closest('.todo-title');
+  if (!titleEl) return;
+  const item = titleEl.closest('.todo-item');
+  if (!item) return;
+  const todoId = item.dataset.todoId;
+  const currentText = titleEl.textContent.trim();
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentText;
+  input.className = 'form-input todo-inline-edit';
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  function save() {
+    const val = input.value.trim();
+    if (val && val !== currentText) {
+      const fd = new FormData();
+      fd.set('title', val);
+      fetch('/todos/' + todoId, { method: 'PATCH', body: fd })
+        .then(r => r.text())
+        .then(html => {
+          const list = document.getElementById('todo-list');
+          list.innerHTML = html;
+          htmx.process(list);
+        });
+    } else {
+      // Revert
+      const span = document.createElement('span');
+      span.className = 'todo-title' + (item.classList.contains('todo-done') ? ' done' : '');
+      span.textContent = currentText;
+      input.replaceWith(span);
+    }
+  }
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = currentText; input.blur(); }
+  });
+});
+</script>
+{% endblock %}

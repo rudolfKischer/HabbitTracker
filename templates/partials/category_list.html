@@ -1,0 +1,28 @@
+{% for cat in categories %}
+<div class="category-manage-row" id="category-{{ cat.id }}"
+     x-data="{ editing: false, name: '{{ cat.name }}' }">
+  <div x-show="!editing" class="category-manage-display">
+    <span class="category-manage-name">{{ cat.name }}</span>
+    <div class="category-manage-actions">
+      <button class="icon-btn edit-btn" @click="editing = true" title="Rename">&#9998;</button>
+      <button class="icon-btn danger-btn"
+              hx-delete="/categories/{{ cat.id }}"
+              hx-target="#categories-list"
+              hx-swap="innerHTML"
+              title="Delete">&times;</button>
+    </div>
+  </div>
+  <div x-show="editing" x-cloak class="category-manage-edit">
+    <input type="text" class="form-input" x-model="name" @keydown.enter="
+      fetch('/categories/{{ cat.id }}', {method:'PATCH', body: new URLSearchParams({name})})
+        .then(r => r.text())
+        .then(html => { document.getElementById('categories-list').innerHTML = html; htmx.process(document.getElementById('categories-list')); });
+    " />
+    <button class="btn-secondary" @click="editing = false">Cancel</button>
+  </div>
+</div>
+{% endfor %}
+
+{% if not categories %}
+<div class="category-empty">No categories yet.</div>
+{% endif %}

@@ -1,0 +1,101 @@
+<div class="settings-habit-row" id="habit-setting-{{ habit.id }}"
+     x-data="{ editing: false, metricOn: {{ 'true' if habit.metric_enabled else 'false' }} }">
+
+  <div class="settings-row-main" x-show="!editing">
+    <div class="settings-habit-info">
+      <span class="settings-habit-name">{{ habit.name }}</span>
+      {% if habit.metric_enabled %}
+      <span class="settings-metric-badge">
+        {{ habit.metric_unit }}
+        {% if habit.metric_default %} &middot; {{ habit.metric_default | int if habit.metric_default == habit.metric_default | int else habit.metric_default }}{% endif %}
+        {% if habit.metric_max %} / {{ habit.metric_max | int if habit.metric_max == habit.metric_max | int else habit.metric_max }}{% endif %}
+        {% if habit.metric_step %} (step {{ habit.metric_step | int if habit.metric_step == habit.metric_step | int else habit.metric_step }}){% endif %}
+      </span>
+      {% endif %}
+      {% if habit.description %}
+      <span class="settings-habit-desc">{{ habit.description }}</span>
+      {% endif %}
+    </div>
+
+    <div class="settings-row-actions">
+      {% if categories is defined and categories %}
+      <select class="form-input sm category-select"
+              title="Category"
+              onchange="fetch('/habits/{{ habit.id }}/category', {method:'POST', body: new URLSearchParams({category_id: this.value})}).then(r=>r.text()).then(html=>{document.getElementById('settings-habits-list').innerHTML=html; htmx.process(document.getElementById('settings-habits-list'));});">
+        <option value="">No category</option>
+        {% for cat in categories %}
+        <option value="{{ cat.id }}" {% if habit.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <form hx-post="/habits/{{ habit.id }}/reorder"
+            hx-target="#settings-habits-list"
+            hx-swap="innerHTML" style="display:inline">
+        <input type="hidden" name="direction" value="up" />
+        <button type="submit" class="icon-btn" title="Move up">&uarr;</button>
+      </form>
+      <form hx-post="/habits/{{ habit.id }}/reorder"
+            hx-target="#settings-habits-list"
+            hx-swap="innerHTML" style="display:inline">
+        <input type="hidden" name="direction" value="down" />
+        <button type="submit" class="icon-btn" title="Move down">&darr;</button>
+      </form>
+      <button class="icon-btn edit-btn" @click="editing = true" title="Edit">&#9998;</button>
+      <button class="icon-btn danger-btn"
+              hx-delete="/habits/{{ habit.id }}"
+              hx-target="#habit-setting-{{ habit.id }}"
+              hx-swap="outerHTML"
+              hx-confirm="Delete '{{ habit.name }}'?"
+              title="Delete">&times;</button>
+    </div>
+  </div>
+
+  <div x-show="editing" x-cloak>
+    <form class="habit-form inline-edit-form"
+          hx-put="/habits/{{ habit.id }}"
+          hx-target="#habit-setting-{{ habit.id }}"
+          hx-swap="outerHTML">
+
+      <div class="form-row">
+        <input type="text" name="name" class="form-input" value="{{ habit.name }}" required placeholder="Habit name" />
+      </div>
+      <div class="form-row">
+        <input type="text" name="description" class="form-input" value="{{ habit.description or '' }}" placeholder="Description (optional)" />
+      </div>
+
+      <div class="form-row">
+        <label class="toggle-label">
+          <input type="checkbox" name="metric_enabled" value="on"
+                 {{ 'checked' if habit.metric_enabled else '' }}
+                 @change="metricOn = $event.target.checked" />
+          Track metric
+        </label>
+        <div class="metric-fields" x-show="metricOn" x-cloak>
+          <div class="metric-fields-inner">
+            <div class="form-col">
+              <label class="form-label sm">Unit</label>
+              <input type="text" name="metric_unit" class="form-input sm" value="{{ habit.metric_unit or '' }}" placeholder="km, pages..." />
+            </div>
+            <div class="form-col">
+              <label class="form-label sm">Default</label>
+              <input type="number" name="metric_default" class="form-input sm" value="{{ habit.metric_default or '' }}" placeholder="5" step="0.1" />
+            </div>
+            <div class="form-col">
+              <label class="form-label sm">Max</label>
+              <input type="number" name="metric_max" class="form-input sm" value="{{ habit.metric_max or '' }}" placeholder="10" step="0.1" />
+            </div>
+            <div class="form-col">
+              <label class="form-label sm">Step</label>
+              <input type="number" name="metric_step" class="form-input sm" value="{{ habit.metric_step or 0.5 }}" placeholder="0.5" step="0.1" min="0.1" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Save</button>
+        <button type="button" class="btn-secondary" @click="editing = false">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>

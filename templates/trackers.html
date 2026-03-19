@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% set active_tab = "trackers" %}
+
+{% block content %}
+<div class="stats-container" x-data="{
+  trackerId: '{{ trackers[0].id if trackers else '' }}',
+  window: '30d',
+  chart: null,
+  loading: false,
+  entries: [],
+  trackerUnit: '{{ trackers[0].unit if trackers else '' }}',
+  entryDate: new Date().toISOString().slice(0, 10),
+  entryValue: '',
+  saved: false,
+  showAdd: false,
+  editing: null,
+  editName: '',
+  editUnit: '',
+  editingEntry: null,
+  editEntryValue: '',
+
+  async loadChart() {
+    if (!this.trackerId) return;
+    this.loading = true;
+    try {
+      const resp = await fetch('/api/trackers/' + this.trackerId + '?window=' + this.window);
+      const json = await resp.json();
+      this.entries = json.entries;
+      this.trackerUnit = json.tracker.unit;
+      this.renderChart(json);
+    } catch(e) { console.error(e); }
+    this.loading = false;
+  },
+
+  renderChart(json) {
+    const entries = json.entries;
+    const tracker = json.tracker;
+    const labels = entries.map(e => e.entry_date);
+    const values = entries.map(e => e.value);
+
+    const cs = getComputedStyle(document.body);
+    const themeColor = cs.getPropertyValue('--theme').trim();
+    const themeDim = cs.getPropertyValue('--theme-dim').trim();
+
+    const ctx = document.getElementById('tracker-chart').getContext('2d');
+    if (this.chart) this.chart.destroy();
+
+    this.chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: tracker.unit || tracker.name,
+          data: values,
+          borderColor: themeColor,
+          backgroundColor: themeDim + '26',
+          tension: 0.3,
+          fill: true,
+          pointBackgroundColor: themeColor,
+          pointRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#c9d1d9' } },
+          tooltip: {
+            backgroundColor: '#161b22',
+            borderColor: '#30363d',
+            borderWidth: 1,
+            titleColor: '#c9d1d9',
+            bodyColor: '#8b949e',
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#8b949e', maxTicksLimit: 10 },
+            grid: { color: '#21262d' },
+          },
+          y: {
+            ticks: { color: '#8b949e' },
+            grid: { color: '#21262d' },
+          },
+        }
+      }
+    });
+  },
+
+  async saveEntry() {
+    if (!this.trackerId || this.entryValue === '') return;
+    const body = new URLSearchParams({
+      entry_date: this.entryDate,
+      value: this.entryValue,
+    });
+    await fetch('/trackers/' + this.trackerId + '/entry', { method: 'POST', body });
+    this.entryValue = '';
+    this.saved = true;
+    setTimeout(() => this.saved = false, 1500);
+    this.loadChart();
+  },
+
+  async updateEntry(entry) {
+    if (this.editEntryValue === '') return;
+    const body = new URLSearchParams({
+      entry_date: entry.entry_date,
+      value: this.editEntryValue,
+    });
+    await fetch('/trackers/' + this.trackerId + '/entry', { method: 'POST', body });
+    this.editingEntry = null;
+    this.loadChart();
+  },
+
+  async deleteEntry(entryId) {
+    await fetch('/trackers/' + this.trackerId + '/entry/' + entryId, { method: 'DELETE' });
+    this.loadChart();
+  },
+
+  selectTracker(id, unit) {
+    this.trackerId = id;
+    this.trackerUnit = unit;
+    this.editingEntry = null;
+    this.loadChart();
+  },
+
+  startEdit(id, name, unit) {
+    this.editing = id;
+    this.editName = name;
+    this.editUnit = unit;
+  },
+
+  async submitEdit() {
+    if (!this.editing) return;
+    const body = new URLSearchParams({ name: this.editName, unit: this.editUnit });
+    await fetch('/trackers/' + this.editing, { method: 'PUT', body });
+    window.location.reload();
+  },
+
+  async deleteTracker(id) {
+    await fetch('/trackers/' + id, { method: 'DELETE' });
+    window.location.reload();
+  },
+}" x-init="loadChart()">
+
+  <h2 class="section-title">Trackers</h2>
+
+  <!-- Tracker list -->
+  <div class="tracker-sidebar">
+    {% for t in trackers %}
+    <button class="tracker-pill"
+            :class="trackerId == '{{ t.id }}' ? 'active' : ''"
+            @click="selectTracker('{{ t.id }}', '{{ t.unit }}')">
+      <span class="tracker-pill-name">{{ t.name }}</span>
+      <span class="tracker-pill-unit">{{ t.unit }}</span>
+    </button>
+    {% endfor %}
+    <button class="tracker-pill tracker-add-pill" @click="showAdd = !showAdd">+ New</button>
+  </div>
+
+  <!-- Add tracker form -->
+  <div class="tracker-add-form" x-show="showAdd" x-cloak x-transition>
+    <form action="/trackers" method="post" class="tracker-inline-form">
+      <input type="text" name="name" placeholder="Name (e.g. Weight)" class="form-input" required />
+      <input type="text" name="unit" placeholder="Unit (e.g. kg)" class="form-input tracker-unit-input" required />
+      <button type="submit" class="btn-primary">Add</button>
+      <button type="button" class="btn-secondary" @click="showAdd = false">Cancel</button>
+    </form>
+  </div>
+
+  <!-- Edit tracker form -->
+  <div class="tracker-add-form" x-show="editing" x-cloak x-transition>
+    <div class="tracker-inline-form">
+      <input type="text" x-model="editName" class="form-input" />
+      <input type="text" x-model="editUnit" class="form-input tracker-unit-input" />
+      <button class="btn-primary" @click="submitEdit()">Save</button>
+      <button class="btn-secondary" @click="editing = null">Cancel</button>
+      <button class="btn-danger" @click="if(confirm('Delete this tracker and all its data?')) deleteTracker(editing)">Delete</button>
+    </div>
+  </div>
+
+  {% if trackers %}
+  <!-- Time window buttons -->
+  <div class="stats-selectors">
+    <div class="window-btns">
+      {% for w in ['7d', '30d', '90d', 'all'] %}
+      <button class="window-btn" :class="window === '{{ w }}' ? 'active' : ''"
+              @click="window = '{{ w }}'; loadChart()">{{ w }}</button>
+      {% endfor %}
+    </div>
+    <button class="icon-btn edit-btn" @click="startEdit(trackerId, $el.closest('.stats-container').querySelector('.tracker-pill.active .tracker-pill-name')?.textContent || '', trackerUnit)" title="Edit tracker">&#9998;</button>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-wrapper">
+    <div class="chart-loading" x-show="loading" x-transition>Loading...</div>
+    <canvas id="tracker-chart"></canvas>
+  </div>
+
+  <!-- Log entry -->
+  <div class="tracker-entry-section">
+    <h3 class="tracker-entry-title">Log Entry</h3>
+    <div class="tracker-entry-form">
+      <input type="date" class="form-input" x-model="entryDate" />
+      <div class="tracker-value-input-wrap">
+        <input type="number" step="any" class="form-input" x-model="entryValue"
+               placeholder="Value" @keydown.enter="saveEntry()" />
+        <span class="tracker-value-unit" x-text="trackerUnit"></span>
+      </div>
+      <button class="btn-primary" @click="saveEntry()">Log</button>
+      <span class="tracker-saved" x-show="saved" x-transition x-cloak>Saved!</span>
+    </div>
+  </div>
+
+  <!-- Recent entries -->
+  <div class="tracker-entries-list" x-show="entries.length > 0">
+    <h3 class="tracker-entry-title">Recent Entries</h3>
+    <template x-for="entry in [...entries].reverse().slice(0, 15)" :key="entry.id">
+      <div class="tracker-entry-row">
+        <span class="tracker-entry-date" x-text="entry.entry_date"></span>
+
+        <!-- Display mode -->
+        <template x-if="editingEntry !== entry.id">
+          <div class="tracker-entry-display">
+            <span class="tracker-entry-value" x-text="entry.value + ' ' + trackerUnit"></span>
+            <button class="icon-btn edit-btn" @click="editingEntry = entry.id; editEntryValue = entry.value" title="Edit">&#9998;</button>
+            <button class="icon-btn danger-btn" @click="deleteEntry(entry.id)" title="Delete">&times;</button>
+          </div>
+        </template>
+
+        <!-- Edit mode -->
+        <template x-if="editingEntry === entry.id">
+          <div class="tracker-entry-edit">
+            <input type="number" step="any" class="form-input tracker-edit-input"
+                   x-model="editEntryValue" @keydown.enter="updateEntry(entry)" @keydown.escape="editingEntry = null" />
+            <span class="tracker-value-unit" x-text="trackerUnit"></span>
+            <button class="icon-btn" @click="updateEntry(entry)" title="Save">&#10003;</button>
+            <button class="icon-btn" @click="editingEntry = null" title="Cancel">&times;</button>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  {% else %}
+  <div class="stats-empty">
+    No trackers yet. Click "+ New" above to create one.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

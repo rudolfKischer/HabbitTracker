@@ -1,0 +1,10 @@
+<form class="todo-sub-form"
+      hx-post="/todos"
+      hx-target="#todo-list"
+      hx-swap="innerHTML"
+      @htmx:after-request="$el.remove()">
+  <input type="hidden" name="parent_id" value="{{ parent_id }}" />
+  <input type="text" name="title" class="form-input todo-sub-input" placeholder="Sub-item..." required autofocus />
+  <button type="submit" class="btn-small">Add</button>
+  <button type="button" class="btn-small btn-cancel" onclick="this.closest('form').remove()">&#10005;</button>
+</form>

@@ -1,0 +1,53 @@
+{% from "partials/todo_item.html" import render_todo %}
+
+{% if todo_groups is defined and todo_groups %}
+  {% set all_completed = [] %}
+  {% for group in todo_groups %}
+    {% if group.todos.active or group.category %}
+    <div class="category-card" data-category-id="{{ group.category.id if group.category else 'none' }}">
+      {% if group.category %}
+      <div class="category-card-header">
+        <span class="category-card-drag-handle" title="Drag to reorder">&#8942;&#8942;</span>
+        <div class="category-card-title">{{ group.category.name }}</div>
+      </div>
+      {% endif %}
+
+      {% if group.todos.active %}
+      <div class="todo-section">
+        {% for todo in group.todos.active %}
+          {{ render_todo(todo, categories=categories) }}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <button class="todo-add-btn"
+              hx-post="/todos"
+              hx-target="#todo-list"
+              hx-swap="innerHTML"
+              {% if group.category %}hx-vals='{"category_id": "{{ group.category.id }}"}'{% endif %}>+</button>
+    </div>
+    {% endif %}
+    {% for todo in group.todos.completed %}
+      {% if all_completed.append(todo) %}{% endif %}
+    {% endfor %}
+  {% endfor %}
+
+  {% if all_completed %}
+  <div class="todo-section todo-completed-section">
+    <div class="todo-completed-label">Completed</div>
+    {% for todo in all_completed %}
+      {{ render_todo(todo, categories=categories) }}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+{% else %}
+  {# No groups at all — show empty state with add button #}
+  <div class="category-card">
+    <button class="todo-add-btn"
+            hx-post="/todos"
+            hx-target="#todo-list"
+            hx-swap="innerHTML">+</button>
+    <div class="todo-empty">No todos yet.</div>
+  </div>
+{% endif %}

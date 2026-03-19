@@ -1,0 +1,56 @@
+{% set goal = (log.metric_goal if log and log.metric_goal else habit.metric_default) or 1 %}
+{% set unit = habit.metric_unit or '' %}
+{% set current = (log.metric_value if log and log.metric_value else 0) %}
+{% set over_goal = current > goal %}
+
+<form class="detail-form" id="detail-form-{{ habit.id }}"
+      hx-post="/habits/{{ habit.id }}/log"
+      hx-target="#habit-{{ habit.id }}-detail"
+      hx-swap="innerHTML">
+
+  <input type="hidden" name="log_date" value="{{ log_date }}" />
+
+  <div class="detail-field">
+    <label class="detail-label">
+      {{ unit | capitalize if unit else "Value" }}
+    </label>
+
+    <input type="hidden" name="metric_value" id="metric-input-{{ habit.id }}" value="{{ current }}" />
+
+    <div class="seg-slider-wrap {% if over_goal %}on-fire{% endif %}"
+         id="seg-wrap-{{ habit.id }}"
+         x-data="segSlider({{ goal }}, {{ current }}, '{{ habit.id }}', '{{ unit }}', {{ habit.metric_step or 0.5 }})"
+         x-init="init()">
+
+      <div class="seg-slider-track" id="seg-track-{{ habit.id }}"
+           @mousedown="startDrag($event)" @touchstart.prevent="startDrag($event)">
+        <div class="seg-slider-fill"
+             :class="overGoal ? 'seg-fill-enchanted' : ''"
+             :style="'width:' + fillPct + '%'">
+          <div class="seg-enchant-glow" x-show="overGoal"></div>
+        </div>
+        <!-- Particle container -->
+        <div class="seg-particles" id="seg-particles-{{ habit.id }}"></div>
+        <!-- Segment markers -->
+        <template x-for="i in segments" :key="i">
+          <div class="seg-marker" :style="'left:' + (i / totalSegs * 100) + '%'"></div>
+        </template>
+      </div>
+
+      <div class="seg-slider-labels">
+        <div class="seg-input-group">
+          <input type="number" class="seg-text-input" :value="value" step="0.1" min="0"
+                 @input="value = parseFloat($event.target.value) || 0; sync()"
+                 @change="value = parseFloat($event.target.value) || 0; sync(); autoSave()" />
+          <span class="seg-input-unit" x-text="unit"></span>
+        </div>
+        {% if saved %}
+        <span class="save-inline" x-data="{ show: true }" x-show="show"
+              x-init="setTimeout(() => show = false, 2000)"
+              x-transition:leave.opacity.duration.800ms>Saved</span>
+        {% endif %}
+        <span class="seg-goal-label-end" x-text="'Goal: ' + goalLabel"></span>
+      </div>
+    </div>
+  </div>
+</form>
