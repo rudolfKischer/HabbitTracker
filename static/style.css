@@ -3073,3 +3073,281 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 .tracker-edit-input {
   width: 90px;
 }
+
+/* ── Schedule ─────────────────────────────────────────────────────────────── */
+
+.schedule-container {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.schedule-timeline {
+  position: relative;
+  height: 1800px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  user-select: none;
+}
+
+.schedule-hour {
+  position: absolute;
+  width: 100%;
+  left: 0;
+}
+
+.schedule-hour-label {
+  position: absolute;
+  left: 8px;
+  top: -8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  user-select: none;
+  z-index: 1;
+}
+
+.schedule-hour-line {
+  position: absolute;
+  left: 56px;
+  right: 0;
+  top: 0;
+  border-top: 1px solid var(--border);
+}
+
+.schedule-add-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* Block */
+.schedule-block {
+  position: absolute;
+  left: 60px;
+  right: 12px;
+  background: var(--theme-darker);
+  border-left: 3px solid var(--theme);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  overflow: visible;
+  z-index: 2;
+  transition: background 0.15s, box-shadow 0.15s;
+  min-height: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.schedule-block:hover {
+  background: var(--theme-dark);
+}
+
+
+.schedule-block-dragging {
+  cursor: grabbing;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  z-index: 10;
+  opacity: 0.9;
+}
+
+.schedule-block-content {
+  flex: 1;
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.schedule-block-display {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.schedule-block-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schedule-block-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Resize handles */
+.schedule-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 3;
+}
+
+.schedule-resize-top {
+  top: -2px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.schedule-resize-bottom {
+  bottom: -2px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.schedule-resize-handle:hover,
+.schedule-resize-handle:active {
+  background: var(--theme);
+  opacity: 0.4;
+}
+
+/* Inline edit */
+.schedule-block-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-edit-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  padding: 0 0 2px 0;
+  font-size: 13px;
+  font-weight: 600;
+  width: 100%;
+  outline: none;
+  caret-color: #fff;
+}
+
+.schedule-edit-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.schedule-block-edit-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.schedule-edit-btn {
+  border: none;
+  padding: 3px 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s;
+}
+
+.schedule-edit-btn.save {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.schedule-edit-btn.save:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.schedule-edit-btn.delete {
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.schedule-edit-btn.delete:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Hour hover zones with add button */
+.schedule-hour-zone {
+  position: absolute;
+  left: 56px;
+  right: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.schedule-hour-add {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.15s, color 0.15s;
+  pointer-events: none;
+}
+
+.schedule-hour-zone:hover .schedule-hour-add,
+.schedule-hour-add:focus {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.schedule-hour-add {
+  pointer-events: auto;
+}
+
+.schedule-hour-add:hover {
+  background: var(--theme);
+  border-color: var(--theme);
+  color: #fff;
+}
+
+/* Now indicator */
+.schedule-now {
+  position: absolute;
+  left: 56px;
+  right: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.schedule-now-line {
+  border-top: 2px solid var(--danger);
+  position: relative;
+}
+
+.schedule-now-line::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  background: var(--danger);
+  border-radius: 50%;
+}

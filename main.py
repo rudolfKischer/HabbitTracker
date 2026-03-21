@@ -247,6 +247,23 @@ async def trackers_page(request: Request, db: Session = Depends(get_db)):
     })
 
 
+@app.get("/schedule", response_class=HTMLResponse)
+async def schedule_page(request: Request, db: Session = Depends(get_db)):
+    user_id = await require_user(request, db)
+    if not user_id:
+        return RedirectResponse("/login", status_code=302)
+
+    blocks = database.get_schedule_blocks(db, user_id)
+    user = database.get_user_by_id(db, user_id)
+    return templates.TemplateResponse("schedule.html", {
+        "request": request,
+        "blocks": blocks,
+        "display_date": display_date_label(today_str()),
+        "user": user,
+        "is_guest": request.session.get("is_guest", False),
+    })
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, db: Session = Depends(get_db)):
     user_id = await require_user(request, db)
@@ -1087,3 +1104,69 @@ async def api_tracker_data(request: Request, tracker_id: int,
         "tracker": {"id": tracker.id, "name": tracker.name, "unit": tracker.unit},
         "entries": [{"entry_date": e.entry_date, "value": e.value, "notes": e.notes, "id": e.id} for e in entries],
     })
+
+
+# ── Schedule ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/schedule")
+async def api_schedule(request: Request, db: Session = Depends(get_db)):
+    user_id = await require_user(request, db)
+    if not user_id:
+        return JSONResponse([])
+    blocks = database.get_schedule_blocks(db, user_id)
+    return JSONResponse([{
+        "id": b.id, "label": b.label,
+        "start_time": b.start_time, "end_time": b.end_time,
+        "color": b.color,
+    } for b in blocks])
+
+
+@app.post("/api/schedule")
+async def api_schedule_create(request: Request, db: Session = Depends(get_db)):
+    user_id = await require_user(request, db)
+    if not user_id:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    form = await request.form()
+    label = form.get("label", "").strip()
+    start_time = form.get("start_time", "").strip()
+    end_time = form.get("end_time", "").strip()
+    color = form.get("color", "").strip() or None
+    if not label or not start_time or not end_time:
+        return JSONResponse({"error": "missing fields"}, status_code=400)
+    if end_time <= start_time:
+        return JSONResponse({"error": "end must be after start"}, status_code=400)
+    block = database.create_schedule_block(db, user_id, label, start_time, end_time, color)
+    return JSONResponse({"id": block.id, "label": block.label,
+                         "start_time": block.start_time, "end_time": block.end_time,
+                         "color": block.color})
+
+
+@app.put("/api/schedule/{block_id}")
+async def api_schedule_update(request: Request, block_id: int, db: Session = Depends(get_db)):
+    user_id = await require_user(request, db)
+    if not user_id:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    form = await request.form()
+    label = form.get("label", "").strip()
+    start_time = form.get("start_time", "").strip()
+    end_time = form.get("end_time", "").strip()
+    color = form.get("color", "").strip() or None
+    if not label or not start_time or not end_time:
+        return JSONResponse({"error": "missing fields"}, status_code=400)
+    if end_time <= start_time:
+        return JSONResponse({"error": "end must be after start"}, status_code=400)
+    block = database.update_schedule_block(db, block_id, user_id, label, start_time, end_time, color)
+    if not block:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse({"id": block.id, "label": block.label,
+                         "start_time": block.start_time, "end_time": block.end_time,
+                         "color": block.color})
+
+
+@app.delete("/api/schedule/{block_id}")
+async def api_schedule_delete(request: Request, block_id: int, db: Session = Depends(get_db)):
+    user_id = await require_user(request, db)
+    if not user_id:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    database.delete_schedule_block(db, block_id, user_id)
+    return JSONResponse({"ok": True})

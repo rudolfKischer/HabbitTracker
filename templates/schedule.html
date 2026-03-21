@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% set active_tab = "schedule" %}
+
+{% block content %}
+<div class="schedule-container" x-data="schedulePage()" x-init="init()">
+
+  <div class="schedule-header">
+    <h2 class="section-title">Daily Schedule</h2>
+  </div>
+
+  <!-- Timeline -->
+  <div class="schedule-timeline" x-ref="timeline"
+       @mousemove="onMouseMove($event)"
+       @mouseup="onMouseUp($event)"
+       @mouseleave="onMouseUp($event)">
+
+    <!-- Hour lines -->
+    <template x-for="h in 25" :key="h">
+      <div class="schedule-hour" :style="'top:' + minToPercent((h - 1) * 60) + '%'">
+        <span class="schedule-hour-label" x-text="formatHour(h - 1)"></span>
+        <div class="schedule-hour-line"></div>
+      </div>
+    </template>
+
+    <!-- Now indicator -->
+    <div class="schedule-now" :style="'top:' + nowPercent() + '%'" x-init="setInterval(() => $el.style.top = nowPercent() + '%', 60000)">
+      <div class="schedule-now-line"></div>
+    </div>
+
+    <!-- Add button zone — click empty space to add -->
+    <div class="schedule-add-hint" x-show="blocks.length === 0">
+      Hover over a time slot and click + to add a block
+    </div>
+
+    <!-- Hoverable hour add buttons -->
+    <template x-for="h in 24" :key="'add-' + h">
+      <div class="schedule-hour-zone"
+           :style="'top:' + minToPercent(h * 60) + '%; height:' + (((100 - 2 * _pad) / 24)) + '%'">
+        <button class="schedule-hour-add" @click.stop="addBlockAtHour(h)">+</button>
+      </div>
+    </template>
+
+    <!-- Blocks -->
+    <template x-for="block in blocks" :key="block.id">
+      <div class="schedule-block"
+           :class="dragBlockId === block.id ? 'schedule-block-dragging' : ''"
+           :style="blockStyle(block)"
+           @mousedown.stop="onBlockMouseDown($event, block)">
+        <!-- Top resize handle -->
+        <div class="schedule-resize-handle schedule-resize-top"
+             @mousedown.stop="onResizeStart($event, block, 'top')"></div>
+        <!-- Content -->
+        <div class="schedule-block-content">
+          <template x-if="editingId !== block.id">
+            <div class="schedule-block-display">
+              <span class="schedule-block-label" x-text="block.label"></span>
+              <span class="schedule-block-time" x-text="formatTime(block.start_time) + ' – ' + formatTime(block.end_time)"></span>
+            </div>
+          </template>
+          <template x-if="editingId === block.id">
+            <div class="schedule-block-edit" @mousedown.stop @click.stop>
+              <input type="text" class="schedule-edit-input" x-model="editLabel"
+                     @keydown.enter="saveEdit(block.id)"
+                     @keydown.escape="editingId = null"
+                     placeholder="Label...">
+              <div class="schedule-block-edit-actions">
+                <button class="schedule-edit-btn save" @click="saveEdit(block.id)" title="Save">&#10003;</button>
+                <button class="schedule-edit-btn delete" @click="deleteBlock(block.id)" title="Delete">&#10005;</button>
+              </div>
+            </div>
+          </template>
+        </div>
+        <!-- Bottom resize handle -->
+        <div class="schedule-resize-handle schedule-resize-bottom"
+             @mousedown.stop="onResizeStart($event, block, 'bottom')"></div>
+      </div>
+    </template>
+  </div>
+
+</div>
+
+<script>
+function schedulePage() {
+  return {
+    blocks: [],
+    editingId: null,
+    editLabel: '',
+
+    // Drag state
+    dragBlockId: null,
+    dragMode: null, // 'move', 'resize-top', 'resize-bottom'
+    dragStartY: 0,
+    dragOrigStart: 0,
+    dragOrigEnd: 0,
+
+    init() {
+      this.loadBlocks();
+    },
+
+    async loadBlocks() {
+      var res = await fetch('/api/schedule');
+      this.blocks = await res.json();
+    },
+
+    // ── Layout: 2% margin top and bottom ──
+    _pad: 2, // percent
+
+    minToPercent(m) {
+      return this._pad + (m / 1440) * (100 - 2 * this._pad);
+    },
+
+    // ── Snapping ──
+    snapToGrid(minutes) {
+      return Math.round(minutes / 15) * 15;
+    },
+
+    minutesToTime(m) {
+      m = Math.max(0, Math.min(1440, m));
+      var h = Math.floor(m / 60);
+      var min = m % 60;
+      return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+    },
+
+    yToMinutes(y) {
+      var tl = this.$refs.timeline;
+      var rect = tl.getBoundingClientRect();
+      var relY = y - rect.top;
+      var pct = relY / rect.height;
+      // Reverse the padding offset
+      var inner = (pct - this._pad / 100) / ((100 - 2 * this._pad) / 100);
+      return Math.round(inner * 1440);
+    },
+
+    // ── Add block at a specific hour ──
+    addBlockAtHour(h) {
+      var startMin = h * 60;
+      var endMin = Math.min(startMin + 60, 1440);
+      if (endMin <= startMin) return;
+      this.addBlock(this.minutesToTime(startMin), this.minutesToTime(endMin));
+    },
+
+    async addBlock(startTime, endTime) {
+      var fd = new FormData();
+      fd.set('label', 'New Block');
+      fd.set('start_time', startTime);
+      fd.set('end_time', endTime);
+      var res = await fetch('/api/schedule', { method: 'POST', body: fd });
+      if (res.ok) {
+        var block = await res.json();
+        this.blocks.push(block);
+        // Start editing the label immediately
+        this.$nextTick(() => {
+          this.startEdit(block);
+        });
+      }
+    },
+
+    // ── Inline editing ──
+    startEdit(block) {
+      this.editingId = block.id;
+      this.editLabel = block.label;
+      this.$nextTick(() => {
+        var input = this.$el.querySelector('.schedule-edit-input');
+        if (input) { input.focus(); input.select(); }
+      });
+    },
+
+    async saveEdit(blockId) {
+      var block = this.blocks.find(b => b.id === blockId);
+      if (!block) return;
+      var label = this.editLabel.trim() || 'Untitled';
+      block.label = label;
+      this.editingId = null;
+      await this.persistBlock(block);
+    },
+
+    // ── Block drag (move) ──
+    onBlockMouseDown(e, block) {
+      if (e.target.closest('.schedule-resize-handle')) return;
+      if (e.target.closest('.schedule-block-edit')) return;
+
+      // Double-click to edit
+      if (e.detail === 2) {
+        this.startEdit(block);
+        return;
+      }
+
+      this.dragBlockId = block.id;
+      this.dragMode = 'move';
+      this.dragStartY = e.clientY;
+      this.dragOrigStart = this.timeToMinutes(block.start_time);
+      this.dragOrigEnd = this.timeToMinutes(block.end_time);
+      e.preventDefault();
+    },
+
+    // ── Resize ──
+    onResizeStart(e, block, edge) {
+      this.dragBlockId = block.id;
+      this.dragMode = 'resize-' + edge;
+      this.dragStartY = e.clientY;
+      this.dragOrigStart = this.timeToMinutes(block.start_time);
+      this.dragOrigEnd = this.timeToMinutes(block.end_time);
+      e.preventDefault();
+    },
+
+    onMouseMove(e) {
+      if (!this.dragBlockId) return;
+      var block = this.blocks.find(b => b.id === this.dragBlockId);
+      if (!block) return;
+
+      var tl = this.$refs.timeline;
+      var usableHeight = tl.clientHeight * (100 - 2 * this._pad) / 100;
+      var pxPerMin = usableHeight / 1440;
+      var dy = e.clientY - this.dragStartY;
+      var dMin = this.snapToGrid(Math.round(dy / pxPerMin));
+
+      if (this.dragMode === 'move') {
+        var duration = this.dragOrigEnd - this.dragOrigStart;
+        var newStart = this.dragOrigStart + dMin;
+        newStart = Math.max(0, Math.min(1440 - duration, newStart));
+        newStart = this.snapToGrid(newStart);
+        block.start_time = this.minutesToTime(newStart);
+        block.end_time = this.minutesToTime(newStart + duration);
+      } else if (this.dragMode === 'resize-top') {
+        var newStart = this.snapToGrid(this.dragOrigStart + dMin);
+        newStart = Math.max(0, Math.min(this.dragOrigEnd - 15, newStart));
+        block.start_time = this.minutesToTime(newStart);
+      } else if (this.dragMode === 'resize-bottom') {
+        var newEnd = this.snapToGrid(this.dragOrigEnd + dMin);
+        newEnd = Math.max(this.dragOrigStart + 15, Math.min(1440, newEnd));
+        block.end_time = this.minutesToTime(newEnd);
+      }
+    },
+
+    async onMouseUp(e) {
+      if (!this.dragBlockId) return;
+      var block = this.blocks.find(b => b.id === this.dragBlockId);
+      this.dragBlockId = null;
+      this.dragMode = null;
+      if (block) await this.persistBlock(block);
+    },
+
+    async persistBlock(block) {
+      var fd = new FormData();
+      fd.set('label', block.label);
+      fd.set('start_time', block.start_time);
+      fd.set('end_time', block.end_time);
+      await fetch('/api/schedule/' + block.id, { method: 'PUT', body: fd });
+    },
+
+    async deleteBlock(id) {
+      await fetch('/api/schedule/' + id, { method: 'DELETE' });
+      this.blocks = this.blocks.filter(b => b.id !== id);
+      this.editingId = null;
+    },
+
+    // ── Helpers ──
+    timeToMinutes(t) {
+      var parts = t.split(':');
+      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    },
+
+    blockStyle(block) {
+      var startMin = this.timeToMinutes(block.start_time);
+      var endMin = this.timeToMinutes(block.end_time);
+      var top = this.minToPercent(startMin);
+      var bottom = this.minToPercent(endMin);
+      return 'top:' + top + '%; height:' + (bottom - top) + '%;';
+    },
+
+    nowPercent() {
+      var now = new Date();
+      var min = now.getHours() * 60 + now.getMinutes();
+      return this.minToPercent(min);
+    },
+
+    formatHour(h) {
+      if (h === 0 || h === 24) return '12 AM';
+      if (h === 12) return '12 PM';
+      if (h < 12) return h + ' AM';
+      return (h - 12) + ' PM';
+    },
+
+    formatTime(t) {
+      var parts = t.split(':');
+      var h = parseInt(parts[0]);
+      var m = parts[1];
+      var ampm = h >= 12 ? 'PM' : 'AM';
+      var h12 = h % 12 || 12;
+      return h12 + ':' + m + ' ' + ampm;
+    },
+  };
+}
+</script>
+{% endblock %}

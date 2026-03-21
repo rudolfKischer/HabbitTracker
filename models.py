@@ -5,7 +5,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "habits.db")
+DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "habits.db"))
 engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -25,6 +25,7 @@ class User(Base):
     todos = relationship("Todo", back_populates="user", cascade="all, delete-orphan")
     categories = relationship("Category", back_populates="user", cascade="all, delete-orphan")
     trackers = relationship("Tracker", back_populates="user", cascade="all, delete-orphan")
+    schedule_blocks = relationship("ScheduleBlock", back_populates="user", cascade="all, delete-orphan")
 
 
 class Category(Base):
@@ -129,6 +130,21 @@ class TrackerEntry(Base):
     tracker = relationship("Tracker", back_populates="entries")
 
     __table_args__ = (UniqueConstraint("tracker_id", "entry_date"),)
+
+
+class ScheduleBlock(Base):
+    __tablename__ = "schedule_blocks"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    label = Column(String, nullable=False)
+    start_time = Column(String, nullable=False)  # "HH:MM" 24-hour format
+    end_time = Column(String, nullable=False)     # "HH:MM" 24-hour format
+    color = Column(String, default=None)
+    order_index = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="schedule_blocks")
 
 
 def create_tables():

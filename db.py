@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, func, case, cast, Integer
 from sqlalchemy.orm import Session
 
-from models import SessionLocal, Habit, HabitLog, User, Todo, Category, Tracker, TrackerEntry, create_tables, engine
+from models import SessionLocal, Habit, HabitLog, User, Todo, Category, Tracker, TrackerEntry, ScheduleBlock, create_tables, engine
 
 
 def get_db():
@@ -828,6 +828,47 @@ def get_tracker_entries(db: Session, tracker_id: int, start_date: str = None):
     if start_date:
         q = q.filter(TrackerEntry.entry_date >= start_date)
     return q.order_by(TrackerEntry.entry_date).all()
+
+
+# ── Schedule block queries ────────────────────────────────────────────────────
+
+def get_schedule_blocks(db: Session, user_id: int):
+    return db.query(ScheduleBlock).filter(
+        ScheduleBlock.user_id == user_id
+    ).order_by(ScheduleBlock.start_time, ScheduleBlock.id).all()
+
+
+def get_schedule_block(db: Session, block_id: int, user_id: int):
+    return db.query(ScheduleBlock).filter(
+        ScheduleBlock.id == block_id, ScheduleBlock.user_id == user_id
+    ).first()
+
+
+def create_schedule_block(db: Session, user_id: int, label: str, start_time: str, end_time: str, color: str = None):
+    block = ScheduleBlock(user_id=user_id, label=label, start_time=start_time, end_time=end_time, color=color)
+    db.add(block)
+    db.commit()
+    db.refresh(block)
+    return block
+
+
+def update_schedule_block(db: Session, block_id: int, user_id: int, label: str, start_time: str, end_time: str, color: str = None):
+    block = get_schedule_block(db, block_id, user_id)
+    if block:
+        block.label = label
+        block.start_time = start_time
+        block.end_time = end_time
+        block.color = color
+        db.commit()
+        db.refresh(block)
+    return block
+
+
+def delete_schedule_block(db: Session, block_id: int, user_id: int):
+    block = get_schedule_block(db, block_id, user_id)
+    if block:
+        db.delete(block)
+        db.commit()
 
 
 # ── Seed data (demo only) ────────────────────────────────────────────────────
