@@ -221,8 +221,9 @@
   const today = new Date();
   today.setHours(0,0,0,0);
 
+  const isMobile = window.innerWidth < 680;
   const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - 364);
+  startDate.setDate(startDate.getDate() - (isMobile ? 90 : 364));
   startDate.setDate(startDate.getDate() - startDate.getDay());
 
   const totalDays = Math.ceil((today - startDate) / 86400000) + 1;

@@ -334,8 +334,9 @@ function statsPage(defaultHabitId) {
         if (monthsEl) monthsEl.innerHTML = '';
         grid.style.width = '100%';
         grid.style.maxWidth = '';
-        grid.style.overflowX = '';
+        grid.style.overflowX = 'hidden';
         grid.style.zoom = '';
+        grid.style.transform = '';
         var html = '<div class="heatmap-strip">';
         for (var si = 0; si < days.length; si++) {
           var day = days[si];
@@ -358,8 +359,27 @@ function statsPage(defaultHabitId) {
           html += '</div>';
         }
         html += '</div>';
+        grid.style.visibility = 'hidden';
         grid.innerHTML = html;
         if (self.$refs.heatmapSlider) self.$refs.heatmapSlider.style.display = 'none';
+        // Scale strip to fit if tiles overflow
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            var strip = grid.querySelector('.heatmap-strip');
+            if (!strip) { grid.style.visibility = ''; return; }
+            var cw = grid.clientWidth;
+            var sw = strip.scrollWidth;
+            if (sw > cw + 2) {
+              var scale = cw / sw;
+              strip.style.transform = 'scale(' + scale.toFixed(4) + ')';
+              strip.style.transformOrigin = 'top left';
+              strip.style.width = (sw * scale) + 'px';
+            } else {
+              strip.style.transform = '';
+            }
+            grid.style.visibility = '';
+          });
+        });
         return;
       }
 

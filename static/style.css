@@ -1308,6 +1308,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 
 .heatmap-tile {
   flex: 1;
+  min-width: 0;
   border-radius: 10px;
   padding: 16px 8px;
   text-align: center;
@@ -2843,6 +2844,32 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   margin-top: 8px;
 }
 
+.carousel-done-section {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.carousel-done-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  user-select: none;
+  list-style: none;
+}
+
+.carousel-done-summary::-webkit-details-marker { display: none; }
+
+.carousel-done-summary::before {
+  content: '▶ ';
+  font-size: 10px;
+}
+
+details[open] .carousel-done-summary::before {
+  content: '▼ ';
+}
+
 /* Navigation */
 .carousel-nav {
   display: flex;
@@ -3718,6 +3745,26 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
     scrollbar-width: none;
   }
   .heatmap-grid::-webkit-scrollbar { display: none; }
+
+  /* Week strip tiles: smaller on mobile to prevent overflow */
+  .heatmap-tile { padding: 10px 4px; min-width: 0; }
+  .heatmap-tile-num { font-size: 18px; }
+  .heatmap-tile-status { font-size: 13px; }
+
+  /* Week grid: hide 7-day version, show 3-day mobile version */
+  .week-grid:not(.week-grid-mobile) { display: none; }
+  .week-grid-mobile {
+    display: grid;
+    padding: 10px;
+    gap: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .week-grid-mobile .week-habit-name { font-size: 11px; }
+  .week-grid-mobile .week-cell { min-height: 32px; }
+  .week-grid-mobile .week-cell-val { font-size: 11px; }
+  .week-grid-mobile .week-day-num { font-size: 13px; }
 
   /* Consistency bars: shrink name column so bars have room */
   .habit-rank-name  { width: 90px; font-size: 12px; }

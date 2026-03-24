@@ -71,6 +71,16 @@
             {% if not group.todos.active %}
             <div class="todo-empty">No active todos</div>
             {% endif %}
+            {% if group.todos.completed %}
+            <details class="carousel-done-section">
+              <summary class="carousel-done-summary">{{ group.todos.completed | length }} completed</summary>
+              <div class="todo-section">
+                {% for todo in group.todos.completed %}
+                  {{ render_todo(todo, categories=categories) }}
+                {% endfor %}
+              </div>
+            </details>
+            {% endif %}
           </div>
         </div>
         {% endfor %}
