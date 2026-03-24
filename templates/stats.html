@@ -12,7 +12,7 @@
       <div class="window-btns">
         {% for w, label in [('week', 'Week'), ('month', 'Month'), ('quarter', 'Quarter'), ('year', 'Year'), ('all', 'All')] %}
         <button class="window-btn" :class="timeWindow === '{{ w }}' ? 'active' : ''"
-                @click="timeWindow = '{{ w }}'; loadAll()">{{ label }}</button>
+                @click="playWindowBtnSound(); timeWindow = '{{ w }}'; loadAll()">{{ label }}</button>
         {% endfor %}
       </div>
     </div>
@@ -24,12 +24,12 @@
         <div class="stat-card-label">Overall</div>
       </div>
       <div class="stat-card stat-card-clickable" :class="highlightMode === 'current' ? 'stat-card-active' : ''"
-           @click="toggleHighlight('current')">
+           @click="playStreakCardSound(highlightMode !== 'current'); toggleHighlight('current')">
         <div class="stat-card-value" x-text="summary.current_streak"></div>
         <div class="stat-card-label">Current Streak</div>
       </div>
       <div class="stat-card stat-card-clickable" :class="highlightMode === 'best' ? 'stat-card-active' : ''"
-           @click="toggleHighlight('best')">
+           @click="playStreakCardSound(highlightMode !== 'best'); toggleHighlight('best')">
         <div class="stat-card-value" x-text="summary.best_streak"></div>
         <div class="stat-card-label">Best Streak</div>
       </div>
@@ -53,7 +53,7 @@
 
     <!-- Chart -->
     <div class="stats-habit-select">
-      <select class="form-select" x-model="habitId" @change="loadAll()">
+      <select class="form-select" x-model="habitId" @change="playWindowBtnSound(); loadAll()">
         {% for h in habits %}
         <option value="{{ h.id }}">{{ h.name }}</option>
         {% endfor %}
@@ -137,10 +137,15 @@ function statsPage(defaultHabitId) {
       setTimeout(function() { self.loadAll(); }, 50);
     },
 
+    _loadAllTimer: null,
     loadAll: function() {
-      this.highlightMode = null;
-      this.loadOverview();
-      this.loadChart();
+      var self = this;
+      if (self._loadAllTimer) clearTimeout(self._loadAllTimer);
+      self._loadAllTimer = setTimeout(function() {
+        self.highlightMode = null;
+        self.loadOverview();
+        self.loadChart();
+      }, 80);
     },
 
     loadOverview: function() {
@@ -266,8 +271,11 @@ function statsPage(defaultHabitId) {
       }
     },
 
+    _renderSeq: 0,
     renderHeatmap: function(data, habit) {
       var self = this;
+      self._renderSeq++;
+      var renderSeq = self._renderSeq;
       var range = self._getHighlightRange();
       var streakStart = range.start;
       var streakEnd = range.end;
@@ -366,18 +374,13 @@ function statsPage(defaultHabitId) {
         // then shrink the whole strip as a unit if it exceeds the container.
         requestAnimationFrame(function() {
           requestAnimationFrame(function() {
+            if (renderSeq !== self._renderSeq) return;
             var strip = grid.querySelector('.heatmap-strip');
             if (!strip) { grid.style.visibility = ''; return; }
             var cw = grid.clientWidth;
-            // Measure natural (preferred) tile width by letting the strip
-            // size to its content instead of flex-filling the container.
             strip.style.width = 'max-content';
             var naturalW = strip.scrollWidth;
             if (naturalW > cw + 2) {
-              // Keep max-content width so tiles stay at their natural size,
-              // then scale the whole strip to fit. origin=top left means the
-              // scaled content starts at the left edge and fills exactly cw.
-              // Container overflow:hidden clips the unused layout space.
               var scale = cw / naturalW;
               strip.style.transform = 'scale(' + scale.toFixed(4) + ')';
               strip.style.transformOrigin = 'top left';
@@ -438,6 +441,7 @@ function statsPage(defaultHabitId) {
         // Scale month grid uniformly to fit container height
         requestAnimationFrame(function() {
           requestAnimationFrame(function() {
+            if (renderSeq !== self._renderSeq) return;
             var wrapper = self.$refs.heatmapWrap;
             if (!wrapper || !grid) return;
             var monthsH = monthsEl ? monthsEl.offsetHeight : 0;
@@ -532,6 +536,7 @@ function statsPage(defaultHabitId) {
       var slider = self.$refs.heatmapSlider;
       requestAnimationFrame(function() {
         requestAnimationFrame(function() {
+          if (renderSeq !== self._renderSeq) return;
           var wrapper = self.$refs.heatmapWrap;
           if (!wrapper || !grid) return;
 

@@ -181,6 +181,7 @@
       if (!NAV_PATHS.includes(href)) return;
       if (href === window.location.pathname) return; // already here
       e.preventDefault();
+      playNavSound();
       navTo(href);
     });
 

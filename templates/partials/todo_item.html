@@ -9,7 +9,8 @@
     <button class="todo-checkbox {% if todo.completed %}checked{% endif %}"
             hx-post="/todos/{{ todo.id }}/toggle"
             hx-target="#todo-list"
-            hx-swap="innerHTML">
+            hx-swap="innerHTML"
+            onclick="playTodoToggleSound({% if todo.completed %}false{% else %}true{% endif %})">
     </button>
     <span class="todo-title {% if todo.completed %}done{% endif %}">{{ todo.title }}</span>
     <div class="todo-actions">
@@ -26,6 +27,7 @@
               hx-delete="/todos/{{ todo.id }}"
               hx-target="#todo-list"
               hx-swap="innerHTML"
+              onclick="playDeleteSound()"
 >&#10005;</button>
     </div>
   </div>

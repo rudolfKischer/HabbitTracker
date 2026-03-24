@@ -3,7 +3,8 @@
   <a href="#" class="date-nav-btn"
      hx-get="/app/week?week={{ week.prev_week }}"
      hx-target="#week-grid-container"
-     hx-swap="innerHTML">&larr;</a>
+     hx-swap="innerHTML"
+     onclick="playDateNavSound()">&larr;</a>
   <span class="week-nav-label">
     {{ week.dates[0][-5:] | replace('-',' / ') }} &ndash; {{ week.dates[6][-5:] | replace('-',' / ') }}
   </span>
@@ -11,7 +12,8 @@
   <a href="#" class="date-nav-btn"
      hx-get="/app/week?week={{ week.next_week }}"
      hx-target="#week-grid-container"
-     hx-swap="innerHTML">&rarr;</a>
+     hx-swap="innerHTML"
+     onclick="playDateNavSound()">&rarr;</a>
   {% else %}
   <span class="date-nav-btn disabled">&rarr;</span>
   {% endif %}

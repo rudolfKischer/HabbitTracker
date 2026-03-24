@@ -6,10 +6,10 @@
 
   <!-- Date navigation -->
   <div class="date-nav">
-    <a href="/app?date={{ prev_date }}" class="date-nav-btn">&larr;</a>
+    <a href="/app?date={{ prev_date }}" class="date-nav-btn" onclick="playDateNavSound()">&larr;</a>
     <span class="date-nav-label">{{ display_date }}</span>
     {% if next_date %}
-    <a href="/app?date={{ next_date }}" class="date-nav-btn">&rarr;</a>
+    <a href="/app?date={{ next_date }}" class="date-nav-btn" onclick="playDateNavSound()">&rarr;</a>
     {% else %}
     <span class="date-nav-btn disabled">&rarr;</span>
     {% endif %}
@@ -50,7 +50,7 @@
     <div class="habit-add-inline" x-data="{ adding: false, name: '' }">
       <button class="habit-add-btn" x-show="!adding" @click="adding = true; $nextTick(() => $refs.nameInput.focus())">+</button>
       <form x-show="adding" x-cloak class="habit-add-form" method="post" action="/habits/quick"
-            @submit="if(!name.trim()){$event.preventDefault()}">
+            @submit="if(!name.trim()){$event.preventDefault()}else{playAddSound()}">
         <input type="text" name="name" class="form-input habit-add-input" x-model="name" x-ref="nameInput"
                placeholder="New habit..." @keydown.escape="adding = false" />
         <button type="submit" class="btn-primary habit-add-submit">Add</button>
@@ -152,12 +152,14 @@
         await fetch('/habits/' + this.id + '/category', { method: 'POST', body: catBody });
       }
       this.saving = false;
+      playSaveSound();
       closeHabitEditor();
       window.location.reload();
     },
 
     async remove() {
       if (!confirm('Delete this habit permanently?')) return;
+      playDeleteSound();
       await fetch('/habits/' + this.id, { method: 'DELETE' });
       closeHabitEditor();
       window.location.reload();

@@ -40,7 +40,7 @@
     <button class="habit-edit-btn" onclick="openHabitEditor({{ habit.id }})" title="Edit habit">&#9998;</button>
 
     {% if habit.metric_enabled %}
-    <button class="expand-btn" @click="open = !open"
+    <button class="expand-btn" @click="playExpandSound(!open); open = !open"
             hx-get="/habits/{{ habit.id }}/detail?log_date={{ log_date }}"
             hx-target="#habit-{{ habit.id }}-detail"
             hx-swap="innerHTML"

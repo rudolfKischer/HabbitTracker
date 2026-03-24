@@ -11,7 +11,7 @@
     <div id="categories-list">
       {% include "partials/category_list.html" %}
     </div>
-    <form class="category-add-form" method="post" action="/categories" style="display: flex; gap: 8px; margin-top: 12px;">
+    <form class="category-add-form" method="post" action="/categories" style="display: flex; gap: 8px; margin-top: 12px;" onsubmit="playAddSound()">
       <input type="text" name="name" class="form-input" placeholder="New category name" required style="flex:1" />
       <button type="submit" class="btn-primary">Add</button>
     </form>
@@ -27,7 +27,7 @@
               hx-post="/settings/theme"
               hx-vals='{"color": "{{ color }}"}'
               hx-swap="none"
-              @click="current = '{{ color }}'; document.body.setAttribute('data-theme', '{{ color }}')"
+              @click="current = '{{ color }}'; document.body.setAttribute('data-theme', '{{ color }}'); playThemeSound()"
               title="{{ color | capitalize }}">
       </button>
       {% endfor %}
