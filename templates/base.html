@@ -26,16 +26,24 @@
         <span class="header-icon">&#9670;</span>
         <h1>Habits</h1>
       </div>
-      <nav class="main-nav">
-        <a href="/app" class="nav-link {% if active_tab == 'today' %}active{% endif %}">Today</a>
-        <a href="/todos" class="nav-link {% if active_tab == 'todos' %}active{% endif %}">Todos</a>
-        <a href="/trackers" class="nav-link {% if active_tab == 'trackers' %}active{% endif %}">Trackers</a>
-        <a href="/schedule" class="nav-link {% if active_tab == 'schedule' %}active{% endif %}">Schedule</a>
-        <a href="/stats" class="nav-link {% if active_tab == 'stats' %}active{% endif %}">Stats</a>
-        <a href="/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}">Settings</a>
+      <nav class="main-nav" id="main-nav">
+        <a href="/app"      class="nav-link {% if active_tab == 'today'    %}active{% endif %}" data-nav="today">Today</a>
+        <a href="/todos"    class="nav-link {% if active_tab == 'todos'    %}active{% endif %}" data-nav="todos">Todos</a>
+        <a href="/trackers" class="nav-link {% if active_tab == 'trackers' %}active{% endif %}" data-nav="trackers">Trackers</a>
+        <a href="/schedule" class="nav-link {% if active_tab == 'schedule' %}active{% endif %}" data-nav="schedule">Schedule</a>
+        <a href="/stats"    class="nav-link {% if active_tab == 'stats'    %}active{% endif %}" data-nav="stats">Stats</a>
+        <a href="/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}" data-nav="settings">Settings</a>
       </nav>
       <div class="header-right">
         <span class="header-date">{{ display_date }}</span>
+        <!-- Install App button (shown by JS when installable) -->
+        <button id="install-btn" class="install-btn" style="display:none" title="Install app">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1v9M4 7l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          Install
+        </button>
         {% if user %}
         <div class="profile-dropdown" x-data="{ open: false }">
           <button class="profile-btn" @click="open = !open" @click.outside="open = false">
@@ -63,10 +71,135 @@
     </div>
   </header>
 
-  <main class="main-content">
+  <main class="main-content" id="page-content">
     {% block content %}{% endblock %}
   </main>
 
   <script src="/static/app.js?v={{ range(100000) | random }}"></script>
+
+  <script>
+  // ── Service Worker ──
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+  }
+
+  // ── Install button ──
+  (function() {
+    var btn = document.getElementById('install-btn');
+    var deferred = null;
+
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferred = e;
+      btn.style.display = '';
+    });
+
+    window.addEventListener('appinstalled', function() {
+      btn.style.display = 'none';
+    });
+
+    // iOS Safari: show button if not already in standalone mode
+    var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var isStandalone = window.navigator.standalone === true;
+    if (isIOS && !isStandalone) btn.style.display = '';
+
+    btn.addEventListener('click', function() {
+      if (deferred) {
+        deferred.prompt();
+        deferred.userChoice.then(function(r) {
+          deferred = null;
+          if (r.outcome === 'accepted') btn.style.display = 'none';
+        });
+      } else if (isIOS) {
+        // Show iOS instruction tooltip
+        var tip = document.getElementById('install-tip');
+        if (tip) {
+          tip.classList.toggle('visible');
+        }
+      }
+    });
+
+    // Hide tip on outside click
+    document.addEventListener('click', function(e) {
+      var tip = document.getElementById('install-tip');
+      if (tip && !btn.contains(e.target)) tip.classList.remove('visible');
+    });
+  })();
+
+  // ── SPA navigation: intercept nav link clicks, swap only #page-content ──
+  (function() {
+    var NAV_PATHS = ['/app', '/todos', '/trackers', '/schedule', '/stats', '/settings'];
+
+    function navTo(path) {
+      htmx.ajax('GET', path, {
+        target: '#page-content',
+        select: '#page-content',
+        swap: 'innerHTML',
+      });
+      history.pushState({path: path}, '', path);
+      updateActiveNav(path);
+    }
+
+    function updateActiveNav(path) {
+      document.querySelectorAll('.nav-link').forEach(function(link) {
+        var href = link.getAttribute('href');
+        link.classList.toggle('active', href === path || (href === '/app' && path === '/'));
+      });
+    }
+
+    // Intercept nav link clicks
+    document.getElementById('main-nav').addEventListener('click', function(e) {
+      var link = e.target.closest('.nav-link');
+      if (!link) return;
+      var href = link.getAttribute('href');
+      if (!NAV_PATHS.includes(href)) return;
+      if (href === window.location.pathname) return; // already here
+      e.preventDefault();
+      navTo(href);
+    });
+
+    // Handle browser back/forward
+    window.addEventListener('popstate', function(e) {
+      var path = window.location.pathname;
+      if (NAV_PATHS.includes(path)) {
+        htmx.ajax('GET', path, {
+          target: '#page-content',
+          select: '#page-content',
+          swap: 'innerHTML',
+        });
+        updateActiveNav(path);
+      }
+    });
+
+    // Re-initialize Alpine after each content swap
+    document.addEventListener('htmx:afterSettle', function(e) {
+      if (e.detail.target && e.detail.target.id === 'page-content') {
+        if (window.Alpine) Alpine.initTree(e.detail.target);
+        // Re-process any HTMX in the new content
+        htmx.process(e.detail.target);
+      }
+    });
+
+    // Background prefetch: load other nav pages after initial load
+    window.addEventListener('load', function() {
+      var currentPath = window.location.pathname;
+      NAV_PATHS.filter(function(p) { return p !== currentPath; })
+        .forEach(function(path, i) {
+          setTimeout(function() {
+            var link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.href = path;
+            link.as = 'document';
+            document.head.appendChild(link);
+          }, 800 + i * 400);
+        });
+    });
+  })();
+  </script>
+
+  <!-- iOS install tooltip -->
+  <div id="install-tip" class="install-tip">
+    In Safari: tap <strong>Share ⬆</strong> then <strong>"Add to Home Screen"</strong>
+  </div>
 </body>
 </html>
