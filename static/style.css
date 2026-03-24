@@ -2469,7 +2469,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   .metric-fields-inner { flex-direction: column; }
   .form-input.sm { width: 100%; }
   .settings-row-main { flex-direction: column; align-items: flex-start; }
-  .week-grid { grid-template-columns: minmax(80px, 110px) repeat(7, 1fr); padding: 10px; gap: 3px; }
+  .week-grid { grid-template-columns: minmax(60px, 90px) repeat(7, 1fr); padding: 10px; gap: 3px; }
   .week-habit-name { font-size: 11px; }
   .week-cell { min-height: 32px; }
   .week-cell-val { font-size: 11px; }
@@ -3611,13 +3611,12 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
     justify-content: center;
   }
 
-  /* Week grid: contained horizontal scroll — page never shifts */
+  /* Week grid: fluid, no horizontal scroll */
   #week-grid-container {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: hidden;
     max-width: 100%;
   }
-  .week-grid { min-width: 420px; }
+  .week-grid { min-width: 0; width: 100%; }
 
   /* Habit edit modal slides up from bottom */
   .habit-edit-overlay { align-items: flex-end; }

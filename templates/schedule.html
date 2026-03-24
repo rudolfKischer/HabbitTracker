@@ -232,18 +232,23 @@ function schedulePage() {
       if (isEdit || isDel) return;
 
       // Resize handle: commit immediately, prevent scroll
+      // For tiny blocks (< 40px), treat as move when selected — no room for resize area
       if (block && (isResTop || isResBot)) {
-        var edge = isResTop ? 'top' : 'bottom';
         e.preventDefault();
-        this._startDrag(block, 'resize-' + edge, touch.clientY);
+        var edge = isResTop ? 'top' : 'bottom';
+        var blockHeight = blockEl ? blockEl.getBoundingClientRect().height : 999;
+        if (blockHeight < 40 && this.selectedId === block.id) {
+          this._startDrag(block, 'move', touch.clientY);
+        } else {
+          this._startDrag(block, 'resize-' + edge, touch.clientY);
+        }
         return;
       }
 
       if (block) {
-        if (this.selectedId === block.id) {
-          // Already selected — lock scroll immediately so drag stays in sync
-          e.preventDefault();
-        } else {
+        // Always prevent scroll when touching any block — schedule interaction takes priority
+        e.preventDefault();
+        if (this.selectedId !== block.id) {
           // Long press to select
           this._lpTimer = setTimeout(() => {
             if (this._t && !this._t.moved) {
