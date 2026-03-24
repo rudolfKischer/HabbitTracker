@@ -3458,11 +3458,26 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
 /* ── 2. Narrow screens: layout fixes ────────────────────────────────────── */
 @media (max-width: 680px) {
 
-  /* Global: remove tap flash on all interactive elements */
-  * { -webkit-tap-highlight-color: transparent; }
-  button, a, [role="button"], input, select, textarea {
-    touch-action: manipulation; /* eliminate 300ms delay everywhere */
+  /* ── Squircle design system ── */
+  :root {
+    --radius: 16px;
+    --radius-sm: 10px;
   }
+
+  /* Global: no horizontal scroll ever, no tap flash */
+  html, body { overflow-x: hidden; max-width: 100vw; }
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  button, a, [role="button"], input, select, textarea {
+    touch-action: manipulation;
+  }
+
+  /* Squircle overrides for hard-coded radius values */
+  .stat-card, .stats-overview-section, .chart-wrapper,
+  .category-card, .habit-edit-panel, .tracker-card,
+  .schedule-block { border-radius: var(--radius) !important; }
+
+  .window-btn, .todo-add-btn, .form-input, .form-select,
+  .schedule-edit-input, .schedule-block-del { border-radius: var(--radius-sm) !important; }
 
   /* Safe area insets (iPhone notch / home bar) */
   .site-header {
@@ -3505,9 +3520,11 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
     overflow: hidden;
   }
 
-  /* Main content padding + space for bottom tab bar */
+  /* Main content: contained, no horizontal bleed */
   .main-content {
     padding: 16px 12px calc(58px + env(safe-area-inset-bottom));
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 
   /* Prevent iOS auto-zoom on input focus */
@@ -3532,21 +3549,13 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
     justify-content: center;
   }
 
-  /* Week grid: scroll horizontally */
+  /* Week grid: contained horizontal scroll — page never shifts */
   #week-grid-container {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    max-width: 100%;
   }
-  .week-grid { min-width: 460px; }
-
-  /* Heatmap: scroll horizontally */
-  .heatmap-container {
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    -webkit-overflow-scrolling: touch;
-    align-items: flex-start;
-    justify-content: flex-start;
-  }
+  .week-grid { min-width: 420px; }
 
   /* Habit edit modal slides up from bottom */
   .habit-edit-overlay { align-items: flex-end; }
