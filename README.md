@@ -41,6 +41,26 @@ sudo systemctl restart habittracker
 sudo systemctl restart nginx
 ```
 
+### Auto-deploy (push from anywhere)
+The Pi checks GitHub every minute and auto-deploys any new commits on `main`.
+
+**Workflow:**
+1. Make changes on any machine
+2. `git push origin main`
+3. Within ~1 minute the live site updates automatically
+
+**How it works:**
+`deploy.sh` runs via cron every minute. It fetches `origin/main` and compares
+with the local HEAD. If there are new commits it pulls and restarts the service.
+
+```bash
+# Watch deploy logs
+tail -f ~/deploy.log
+
+# Run manually
+~/deploy.sh
+```
+
 ### DuckDNS
 - Subdomain: dailytally
 - Domain: dailytally.duckdns.org
