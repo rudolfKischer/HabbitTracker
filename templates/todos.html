@@ -181,6 +181,7 @@ function todoCarousel() {
     },
 
     updateHeight() {
+      if (window.innerWidth < 600) return; // CSS auto height on mobile
       const cards = this.$el.querySelectorAll('.carousel-card');
       let max = 350;
       cards.forEach(c => { if (c.scrollHeight > max) max = c.scrollHeight; });
@@ -204,8 +205,17 @@ function todoCarousel() {
     },
 
     cardStyle(index) {
+      // On mobile: CSS handles all card layout via !important overrides.
+      // Just show/hide — return empty string for front (CSS handles positioning),
+      // display:none for others (inline style, hidden regardless of CSS).
+      if (window.innerWidth < 600) {
+        const diff = this._ringDiff(index);
+        return Math.abs(diff) < 0.01 ? '' : 'display:none';
+      }
+
       const scene = this.$el.querySelector('.carousel-scene');
       const sceneW = scene ? scene.offsetWidth : 600;
+
       const cardW = Math.min(600, sceneW * 0.92);
       const centerX = (sceneW - cardW) / 2;
 

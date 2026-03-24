@@ -3088,6 +3088,20 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   margin-bottom: 16px;
 }
 
+.schedule-add-btn-mobile {
+  display: none; /* shown via @media (hover: none) */
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+
 .schedule-timeline {
   position: relative;
   height: 1800px;
@@ -3143,27 +3157,41 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   cursor: grab;
   overflow: visible;
   z-index: 2;
-  transition: background 0.15s, box-shadow 0.15s;
+  transition: box-shadow 0.18s, background 0.15s, transform 0.1s;
   min-height: 20px;
   display: flex;
   flex-direction: column;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.schedule-block:focus-within {
+  outline: none;
 }
 
 .schedule-block:hover {
   background: var(--theme-dark);
 }
 
+/* Selected: glowing ring, elevated */
+.schedule-block.is-selected {
+  box-shadow: 0 0 0 2px var(--theme), 0 6px 20px rgba(0,0,0,0.3);
+  z-index: 8;
+  background: var(--theme-dark);
+}
 
-.schedule-block-dragging {
+/* Dragging */
+.schedule-block.is-dragging {
   cursor: grabbing;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  z-index: 10;
-  opacity: 0.9;
+  box-shadow: 0 0 0 2px var(--theme), 0 12px 32px rgba(0,0,0,0.45);
+  z-index: 100;
+  opacity: 0.88;
+  transform: scaleX(1.01);
 }
 
 .schedule-block-content {
   flex: 1;
-  padding: 0 10px;
+  padding: 0 32px 0 10px; /* right padding leaves room for delete btn */
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -3195,31 +3223,66 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   flex-shrink: 0;
 }
 
+/* Delete button (shown when selected) */
+.schedule-block-del {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.25);
+  color: rgba(255,255,255,0.75);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  z-index: 4;
+  padding: 0;
+}
+.schedule-block-del:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
 /* Resize handles */
 .schedule-resize-handle {
   position: absolute;
   left: 0;
   right: 0;
-  height: 8px;
+  height: 10px;
   cursor: ns-resize;
   z-index: 3;
+  transition: background 0.15s, height 0.15s, opacity 0.15s;
+  opacity: 0;
+}
+.schedule-block:hover .schedule-resize-handle,
+.schedule-block.is-selected .schedule-resize-handle {
+  opacity: 1;
 }
 
 .schedule-resize-top {
-  top: -2px;
+  top: -3px;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: linear-gradient(to bottom, var(--theme), transparent);
 }
 
 .schedule-resize-bottom {
-  bottom: -2px;
+  bottom: -3px;
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: linear-gradient(to top, var(--theme), transparent);
 }
 
-.schedule-resize-handle:hover,
-.schedule-resize-handle:active {
-  background: var(--theme);
-  opacity: 0.4;
+/* Larger hit targets on selected block */
+.schedule-block.is-selected .schedule-resize-handle {
+  height: 18px;
 }
+.schedule-block.is-selected .schedule-resize-top  { top: -5px; }
+.schedule-block.is-selected .schedule-resize-bottom { bottom: -5px; }
 
 /* Inline edit */
 .schedule-block-edit {
@@ -3239,45 +3302,49 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   width: 100%;
   outline: none;
   caret-color: #fff;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 0;
 }
 
 .schedule-edit-input::placeholder {
   color: rgba(255, 255, 255, 0.35);
 }
 
-.schedule-block-edit-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
 .schedule-edit-btn {
   border: none;
-  padding: 3px 6px;
+  padding: 4px 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
   border-radius: var(--radius-sm);
   transition: background 0.15s, color 0.15s;
-}
-
-.schedule-edit-btn.save {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.18);
   color: #fff;
+  flex-shrink: 0;
+}
+.schedule-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.32);
 }
 
-.schedule-edit-btn.save:hover {
-  background: rgba(255, 255, 255, 0.3);
+/* Long-press hold indicator */
+.schedule-hold-indicator {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--theme);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+  z-index: 50;
+  animation: schedule-hold-grow 0.5s cubic-bezier(0.2, 0, 0.4, 1) forwards;
 }
 
-.schedule-edit-btn.delete {
-  background: rgba(0, 0, 0, 0.2);
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.schedule-edit-btn.delete:hover {
-  background: var(--danger);
-  color: #fff;
+@keyframes schedule-hold-grow {
+  0%   { transform: translate(-50%, -50%) scale(0);    opacity: 0.3; }
+  60%  { transform: translate(-50%, -50%) scale(0.85); opacity: 0.2; }
+  100% { transform: translate(-50%, -50%) scale(1);    opacity: 0; }
 }
 
 /* Hour hover zones with add button */
@@ -3350,4 +3417,263 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   height: 8px;
   background: var(--danger);
   border-radius: 50%;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE — two separate concerns handled with the right media queries:
+   1. @media (hover: none)  → touch devices: fix hover-only UI
+   2. @media (max-width: 680px) → narrow screens: fix layout
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Touch devices: reveal hover-hidden elements ─────────────────────── */
+@media (hover: none) {
+  /* Habit row controls */
+  .habit-edit-btn       { opacity: 0.55; }
+  .habit-drag-handle    { display: none; }
+
+  /* Category drag handle */
+  .category-card-drag-handle { display: none; }
+
+  /* Todo drag handle */
+  .todo-drag-handle { display: none; }
+
+  /* Todo actions (delete, category) */
+  .todo-actions { opacity: 1; }
+
+  /* Tracker entry edit/delete buttons */
+  .tracker-entry-display .icon-btn { opacity: 1; }
+
+  /* Schedule: hide per-hour add buttons on touch — use long-press instead */
+  .schedule-hour-add {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+  /* Resize handles always visible on touch when selected */
+  .schedule-block.is-selected .schedule-resize-handle {
+    opacity: 1;
+  }
+}
+
+/* ── 2. Narrow screens: layout fixes ────────────────────────────────────── */
+@media (max-width: 680px) {
+
+  /* Global: remove tap flash on all interactive elements */
+  * { -webkit-tap-highlight-color: transparent; }
+  button, a, [role="button"], input, select, textarea {
+    touch-action: manipulation; /* eliminate 300ms delay everywhere */
+  }
+
+  /* Safe area insets (iPhone notch / home bar) */
+  .site-header {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Compact header */
+  .header-inner {
+    padding: 0 12px;
+    gap: 8px;
+    height: 48px;
+  }
+  .header-date   { display: none; }
+  .profile-name  { display: none; }
+  .profile-caret { display: none; }
+
+  /* Bottom tab bar nav */
+  .main-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .nav-link {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 2px;
+    font-size: 10px;
+    border-radius: 0;
+    min-height: 50px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  /* Main content padding + space for bottom tab bar */
+  .main-content {
+    padding: 16px 12px calc(58px + env(safe-area-inset-bottom));
+  }
+
+  /* Prevent iOS auto-zoom on input focus */
+  input, textarea, select { font-size: 16px !important; }
+
+  /* Remove 300ms tap delay */
+  button, a { touch-action: manipulation; }
+
+  /* ── Today ── */
+  .progress-header   { padding: 12px 14px; }
+  .progress-count    { font-size: 20px; }
+  .category-card     { padding: 12px; }
+  .habit-main        { padding: 12px; gap: 10px; }
+  .checkbox-box      { width: 28px; height: 28px; border-radius: 6px; }
+  .section-title     { font-size: 16px; margin-bottom: 14px; }
+
+  .date-nav-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Week grid: scroll horizontally */
+  #week-grid-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .week-grid { min-width: 460px; }
+
+  /* Heatmap: scroll horizontally */
+  .heatmap-container {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  /* Habit edit modal slides up from bottom */
+  .habit-edit-overlay { align-items: flex-end; }
+  .habit-edit-panel {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 85vh;
+  }
+  .habit-edit-header { padding: 20px 20px 0; }
+  .habit-edit-body   { padding: 16px 20px; }
+  .habit-edit-footer { padding: 16px 20px 20px; }
+
+  /* ── Todos ── */
+  .todos-container {
+    padding: 0;
+  }
+  /* Remove the -50vw trick that bleeds off screen */
+  .todos-container .carousel-view {
+    margin: 0;
+    padding: 0;
+  }
+  /* On mobile, carousel JS puts front card as position:relative.
+     Override ALL absolute-positioned card styles with !important
+     so the inline styles from the ring calculation don't apply. */
+  .carousel-scene {
+    height: auto !important;
+  }
+  .carousel-track {
+    position: relative;
+    height: auto;
+    min-height: 0;
+  }
+  .carousel-card {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transition: none !important;
+  }
+
+  .todo-checkbox      { width: 24px; height: 24px; }
+  .todo-category-select { display: none; }
+  .todo-item          { overflow: hidden; }
+
+  /* ── Trackers ── */
+  .tracker-entry-form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .tracker-entry-form .form-input { max-width: 100%; width: 100%; }
+  .tracker-value-input-wrap       { width: 100%; }
+  .tracker-inline-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tracker-unit-input { max-width: 100%; }
+
+  /* ── Stats ── */
+  .window-btns  { flex-wrap: wrap; gap: 6px; }
+  .window-btn   { padding: 6px 12px; font-size: 12px; }
+  .stats-two-col { grid-template-columns: 1fr; }
+  .stats-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .form-select  { min-width: 0; width: 100%; }
+
+  /* Scale down stat cards to fit without clipping */
+  .stat-card-value     { font-size: 20px; }
+  .stat-card           { padding: 10px 8px; }
+  .stats-summary-row   { gap: 8px; }
+  .stats-summary-row .stat-card { min-width: 70px; }
+
+  /* Chart: shorter on mobile */
+  .chart-wrapper {
+    height: 230px;
+    padding: 12px;
+    padding-bottom: 36px;
+  }
+  .chart-wrapper canvas        { height: 175px !important; max-height: 175px; }
+  .chart-wrapper > div:has(canvas) { height: 175px; }
+
+  /* Heatmap: allow horizontal scroll only for year/all (grid is wide),
+     but don't let it bleed outside the card */
+  .heatmap-container {
+    overflow-x: hidden !important;
+    width: 100%;
+  }
+  .heatmap-grid {
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+  }
+  .heatmap-grid::-webkit-scrollbar { display: none; }
+
+  /* Consistency bars: shrink name column so bars have room */
+  .habit-rank-name  { width: 90px; font-size: 12px; }
+  .habit-rank-pct   { width: 32px; font-size: 11px; }
+
+  /* Overview panels: less padding */
+  .stats-overview-section { padding: 14px; }
+
+  /* ── Settings ── */
+  .demo-data-actions          { flex-direction: column; gap: 8px; }
+  .demo-data-actions form     { display: block !important; width: 100%; }
+  .demo-data-actions button   { width: 100%; }
+  .settings-row-main          { flex-direction: column; align-items: flex-start; }
+
+  /* ── Schedule ── */
+  .schedule-hour-label { font-size: 10px; }
+  .schedule-hour-line  { left: 44px; }
+  .schedule-hour-zone  { left: 44px; }
+  .schedule-block      { left: 48px !important; }
+  .schedule-now        { left: 44px; }
+  /* Larger touch targets for resize handles on mobile */
+  .schedule-block.is-selected .schedule-resize-handle { height: 26px; }
+  .schedule-block.is-selected .schedule-resize-top    { top: -8px; }
+  .schedule-block.is-selected .schedule-resize-bottom { bottom: -8px; }
+  /* Delete button slightly bigger */
+  .schedule-block-del  { width: 26px; height: 26px; font-size: 12px; }
+  /* Content padding adjusted for bigger del button */
+  .schedule-block-content { padding-right: 36px; }
 }

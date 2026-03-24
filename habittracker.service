@@ -1,0 +1,14 @@
+[Unit]
+Description=HabbitTracker FastAPI App
+After=network.target
+
+[Service]
+User=rudolfkischer
+WorkingDirectory=/home/rudolfkischer/Projects/HabbitTracker
+EnvironmentFile=/home/rudolfkischer/Projects/HabbitTracker/.env
+ExecStart=/home/rudolfkischer/Projects/HabbitTracker/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
