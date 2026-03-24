@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#0f0f0f"/>
+  <!-- Four vertical tally marks -->
+  <line x1="7" y1="6" x2="7" y2="26" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+  <line x1="13" y1="6" x2="13" y2="26" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+  <line x1="19" y1="6" x2="19" y2="26" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+  <line x1="25" y1="6" x2="25" y2="26" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+  <!-- Diagonal strike-through -->
+  <line x1="3" y1="22" x2="29" y2="8" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+</svg>
