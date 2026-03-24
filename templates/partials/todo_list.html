@@ -24,6 +24,7 @@
               hx-post="/todos"
               hx-target="#todo-list"
               hx-swap="innerHTML"
+              onclick="playAddSound()"
               {% if group.category %}hx-vals='{"category_id": "{{ group.category.id }}"}'{% endif %}>+</button>
     </div>
     {% endif %}
@@ -47,7 +48,8 @@
     <button class="todo-add-btn"
             hx-post="/todos"
             hx-target="#todo-list"
-            hx-swap="innerHTML">+</button>
+            hx-swap="innerHTML"
+            onclick="playAddSound()">+</button>
     <div class="todo-empty">No todos yet.</div>
   </div>
 {% endif %}

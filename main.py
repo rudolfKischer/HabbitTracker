@@ -212,6 +212,7 @@ async def index(request: Request, db: Session = Depends(get_db),
         "week": week,
         "recent_days": recent_days,
         "categories": categories,
+        "today": today_str(),
     })
 
 
@@ -302,6 +303,7 @@ async def week_view(request: Request, db: Session = Depends(get_db),
         "request": request,
         "week": week_data,
         "log_date": log_date,
+        "today": today_str(),
     })
 
 
@@ -328,6 +330,7 @@ async def week_toggle(request: Request, habit_id: int,
         "request": request,
         "week": week_data,
         "log_date": page_date,
+        "today": today_str(),
     })
 
 

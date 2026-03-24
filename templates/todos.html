@@ -66,7 +66,7 @@
                     hx-post="/todos"
                     hx-target="#todo-list"
                     hx-swap="innerHTML"
-                    @click="$nextTick(() => { $dispatch('carousel-refresh') })"
+                    @click="playAddSound(); $nextTick(() => { $dispatch('carousel-refresh') })"
                     {% if group.category %}hx-vals='{"category_id": "{{ group.category.id }}"}'{% endif %}>+</button>
             {% if not group.todos.active %}
             <div class="todo-empty">No active todos</div>
@@ -94,7 +94,8 @@
             <button class="todo-add-btn"
                     hx-post="/todos"
                     hx-target="#todo-list"
-                    hx-swap="innerHTML">+</button>
+                    hx-swap="innerHTML"
+                    onclick="playAddSound()">+</button>
             <div class="todo-empty">No todos yet.</div>
           </div>
         </div>
@@ -103,7 +104,7 @@
     </div>
 
     <div class="carousel-nav">
-      <button class="carousel-nav-btn" @click="prev()">&larr;</button>
+      <button class="carousel-nav-btn" @click="playCarouselSound(); prev()">&larr;</button>
       <div class="carousel-dots">
         {% for group in carousel_groups %}
         <button class="carousel-dot" :class="current === {{ loop.index0 }} && 'active'"
@@ -113,7 +114,7 @@
         <button class="carousel-dot active"></button>
         {% endif %}
       </div>
-      <button class="carousel-nav-btn" @click="next()">&rarr;</button>
+      <button class="carousel-nav-btn" @click="playCarouselSound(); next()">&rarr;</button>
     </div>
   </div>
 </div>
@@ -173,8 +174,8 @@ function todoCarousel() {
         const container = document.querySelector('.todos-container');
         const data = container._x_dataStack ? Alpine.$data(container) : null;
         if (!data || data.viewMode !== 'carousel') return;
-        if (e.key === 'ArrowLeft') this.prev();
-        if (e.key === 'ArrowRight') this.next();
+        if (e.key === 'ArrowLeft') { playCarouselSound(); this.prev(); }
+        if (e.key === 'ArrowRight') { playCarouselSound(); this.next(); }
       };
       document.addEventListener('keydown', this._onKey);
 
@@ -185,6 +186,7 @@ function todoCarousel() {
       scene.addEventListener('touchend', (e) => {
         const dx = e.changedTouches[0].clientX - this._touchStartX;
         if (Math.abs(dx) > 50) {
+          playCarouselSound();
           dx > 0 ? this.prev() : this.next();
         }
       }, { passive: true });

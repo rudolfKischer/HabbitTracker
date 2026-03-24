@@ -9,11 +9,13 @@
               hx-delete="/categories/{{ cat.id }}"
               hx-target="#categories-list"
               hx-swap="innerHTML"
+              onclick="playDeleteSound()"
               title="Delete">&times;</button>
     </div>
   </div>
   <div x-show="editing" x-cloak class="category-manage-edit">
     <input type="text" class="form-input" x-model="name" @keydown.enter="
+      playSaveSound();
       fetch('/categories/{{ cat.id }}', {method:'PATCH', body: new URLSearchParams({name})})
         .then(r => r.text())
         .then(html => { document.getElementById('categories-list').innerHTML = html; htmx.process(document.getElementById('categories-list')); });

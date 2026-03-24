@@ -5,8 +5,24 @@ function getAudioCtx() {
   if (!_audioCtx) {
     _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
+  if (_audioCtx.state === 'suspended') {
+    _audioCtx.resume();
+  }
   return _audioCtx;
 }
+
+// Eagerly unlock AudioContext on first user interaction so hover sounds work
+(function() {
+  function unlock() {
+    getAudioCtx();
+    document.removeEventListener('click', unlock, true);
+    document.removeEventListener('touchstart', unlock, true);
+    document.removeEventListener('keydown', unlock, true);
+  }
+  document.addEventListener('click', unlock, true);
+  document.addEventListener('touchstart', unlock, true);
+  document.addEventListener('keydown', unlock, true);
+})();
 
 /* ── Combo tracker — rising pitch for rapid checks ────────────────────────── */
 let _comboCount = 0;
@@ -146,6 +162,426 @@ function playSliderTick() {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
     osc.start(now);
     osc.stop(now + 0.035);
+  } catch (e) {}
+}
+
+/* ── Navigation tab switch sound ──────────────────────────────────────────── */
+function playNavSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // Soft pop — short sine blip at mid frequency
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(700, now);
+    osc.frequency.exponentialRampToValueAtTime(500, now + 0.06);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    osc.start(now);
+    osc.stop(now + 0.07);
+  } catch (e) {}
+}
+
+/* ── Todo checkbox sound (softer single note) ────────────────────────────── */
+function playTodoToggleSound(isChecking) {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    if (isChecking) {
+      osc.frequency.setValueAtTime(480, now);
+      osc.frequency.exponentialRampToValueAtTime(640, now + 0.1);
+    } else {
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(320, now + 0.1);
+    }
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.1, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.start(now);
+    osc.stop(now + 0.13);
+  } catch (e) {}
+}
+
+/* ── Delete / whoosh sound ───────────────────────────────────────────────── */
+function playDeleteSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // Noise-like sweep down using fast frequency drop
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.06, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  } catch (e) {}
+}
+
+/* ── Add / create sound (bright ascending blip) ─────────────────────────── */
+function playAddSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  } catch (e) {}
+}
+
+/* ── Modal open (gentle slide-up tone) ───────────────────────────────────── */
+function playModalOpenSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(300, now);
+    osc.frequency.exponentialRampToValueAtTime(500, now + 0.12);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.start(now);
+    osc.stop(now + 0.19);
+  } catch (e) {}
+}
+
+/* ── Modal close (gentle slide-down tone) ────────────────────────────────── */
+function playModalCloseSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(500, now);
+    osc.frequency.exponentialRampToValueAtTime(300, now + 0.12);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.start(now);
+    osc.stop(now + 0.19);
+  } catch (e) {}
+}
+
+/* ── Theme change shimmer/sparkle ────────────────────────────────────────── */
+function playThemeSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // Three quick ascending sparkle notes
+    [1200, 1500, 1800].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.06);
+      gain.gain.setValueAtTime(0, now + i * 0.06);
+      gain.gain.linearRampToValueAtTime(0.07, now + i * 0.06 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.2);
+      osc.start(now + i * 0.06);
+      osc.stop(now + i * 0.06 + 0.2);
+    });
+  } catch (e) {}
+}
+
+/* ── Carousel swipe swoosh ───────────────────────────────────────────────── */
+function playCarouselSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // Quick noise-like sweep
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, now);
+    osc.frequency.exponentialRampToValueAtTime(250, now + 0.08);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.05, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  } catch (e) {}
+}
+
+/* ── Tracker entry saved — warm confirmation ding ────────────────────────── */
+function playSaveSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(587, now); // D5
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc.start(now);
+    osc.stop(now + 0.3);
+  } catch (e) {}
+}
+
+/* ── Drag pickup (low thunk) ─────────────────────────────────────────────── */
+function playDragPickupSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, now);
+    osc.frequency.exponentialRampToValueAtTime(120, now + 0.06);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  } catch (e) {}
+}
+
+/* ── Drag drop (snap into place) ─────────────────────────────────────────── */
+function playDragDropSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // Two quick notes: low then high — "locked in" feel
+    const o1 = ctx.createOscillator();
+    const g1 = ctx.createGain();
+    o1.connect(g1);
+    g1.connect(ctx.destination);
+    o1.type = 'sine';
+    o1.frequency.setValueAtTime(300, now);
+    g1.gain.setValueAtTime(0, now);
+    g1.gain.linearRampToValueAtTime(0.1, now + 0.005);
+    g1.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    o1.start(now);
+    o1.stop(now + 0.06);
+
+    const o2 = ctx.createOscillator();
+    const g2 = ctx.createGain();
+    o2.connect(g2);
+    g2.connect(ctx.destination);
+    o2.type = 'triangle';
+    o2.frequency.setValueAtTime(600, now + 0.04);
+    g2.gain.setValueAtTime(0, now + 0.04);
+    g2.gain.linearRampToValueAtTime(0.1, now + 0.045);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    o2.start(now + 0.04);
+    o2.stop(now + 0.13);
+  } catch (e) {}
+}
+
+/* ── Schedule block place (soft plop) ────────────────────────────────────── */
+function playBlockPlaceSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(350, now);
+    osc.frequency.exponentialRampToValueAtTime(200, now + 0.08);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.start(now);
+    osc.stop(now + 0.11);
+  } catch (e) {}
+}
+
+/* ── Date navigation tick ────────────────────────────────────────────────── */
+function playDateNavSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, now);
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    osc.start(now);
+    osc.stop(now + 0.045);
+  } catch (e) {}
+}
+
+/* ── Progress milestone sound (25/50/75%) ────────────────────────────────── */
+let _lastMilestone = 0;
+
+function playMilestoneSound(pct) {
+  try {
+    const milestone = pct >= 75 ? 75 : pct >= 50 ? 50 : pct >= 25 ? 25 : 0;
+    if (milestone <= _lastMilestone || milestone === 0) return;
+    _lastMilestone = milestone;
+
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    // Pitch rises with milestone
+    const freq = 400 + milestone * 3;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq * 1.2, now + 0.15);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.1, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.start(now);
+    osc.stop(now + 0.26);
+  } catch (e) {}
+}
+
+/* ── Metric exceeds goal — sparkle burst ─────────────────────────────────── */
+function playGoalExceededSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    [800, 1000, 1200, 1500].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.05);
+      gain.gain.setValueAtTime(0, now + i * 0.05);
+      gain.gain.linearRampToValueAtTime(0.06, now + i * 0.05 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.15);
+      osc.start(now + i * 0.05);
+      osc.stop(now + i * 0.05 + 0.15);
+    });
+  } catch (e) {}
+}
+
+/* ── Window/tab switch sound (subtle click) ──────────────────────────────── */
+function playWindowBtnSound() {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(550, now);
+    osc.frequency.exponentialRampToValueAtTime(420, now + 0.04);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.07, now + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.start(now);
+    osc.stop(now + 0.06);
+  } catch (e) {}
+}
+
+/* ── Streak card toggle sound (warm toggle) ──────────────────────────────── */
+function playStreakCardSound(activating) {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'triangle';
+    if (activating) {
+      osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(700, now + 0.1);
+    } else {
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+    }
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.1, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  } catch (e) {}
+}
+
+/* ── Expand/collapse detail sound ────────────────────────────────────────── */
+function playExpandSound(opening) {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    if (opening) {
+      osc.frequency.setValueAtTime(350, now);
+      osc.frequency.exponentialRampToValueAtTime(550, now + 0.08);
+    } else {
+      osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+    }
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.07, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.start(now);
+    osc.stop(now + 0.11);
+  } catch (e) {}
+}
+
+/* ── Hover tick (very subtle) ────────────────────────────────────────────── */
+let _hoverTickLast = 0;
+function playHoverTickSound() {
+  try {
+    const now = performance.now();
+    if (now - _hoverTickLast < 60) return; // throttle: max ~16/sec
+    _hoverTickLast = now;
+    const ctx = getAudioCtx();
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1400, t);
+    gain.gain.setValueAtTime(0.025, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    osc.start(t);
+    osc.stop(t + 0.025);
   } catch (e) {}
 }
 
@@ -321,6 +757,7 @@ function segSlider(goal, initial, habitId, unit, step) {
       const wrap = document.getElementById('seg-wrap-' + this.habitId);
       const row = wrap ? wrap.closest('.habit-row') : null;
       if (this.overGoal) {
+        if (wrap && !wrap.classList.contains('on-fire')) playGoalExceededSound();
         if (wrap) wrap.classList.add('on-fire');
         if (row) row.classList.add('on-fire');
         this.startParticles();
@@ -404,6 +841,9 @@ function updateProgress() {
         const pct = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
         bar.style.width = pct + '%';
 
+        // Milestone sounds at 25/50/75%
+        if (_prevDone >= 0) playMilestoneSound(pct);
+
         // Glow effect when progress bar is full
         const header = document.getElementById('progress-header');
         if (pct >= 100) {
@@ -424,10 +864,41 @@ function updateProgress() {
     .catch(() => {});
 }
 
-// Initialize _prevDone on page load
+/* ── Hover tick for interactive grid cells ────────────────────────────────── */
+document.addEventListener('mouseenter', function(e) {
+  var t = e.target;
+  // Week grid cells
+  if (t.classList && t.classList.contains('week-cell') && !t.classList.contains('week-cell-na')) {
+    playHoverTickSound(); return;
+  }
+  // SVG heatmap cells (year overview)
+  if (t.tagName === 'rect' && t.classList && t.classList.contains('heatmap-cell')) {
+    playHoverTickSound(); return;
+  }
+  // Stats heatmap grid cells
+  if (t.classList && t.classList.contains('heatmap-cell') && !t.classList.contains('empty')) {
+    playHoverTickSound(); return;
+  }
+  // Stats heatmap flow cells (month view)
+  if (t.classList && t.classList.contains('heatmap-flow-cell') && !t.classList.contains('empty')) {
+    playHoverTickSound(); return;
+  }
+  // Stats heatmap tiles (week view)
+  if (t.classList && t.classList.contains('heatmap-tile')) {
+    playHoverTickSound(); return;
+  }
+}, true);
+
+// Initialize _prevDone and _lastMilestone on page load
 document.addEventListener('DOMContentLoaded', () => {
   const doneEl = document.getElementById('done-count');
+  const totalEl = document.getElementById('total-count');
   if (doneEl) _prevDone = parseInt(doneEl.textContent) || 0;
+  if (doneEl && totalEl) {
+    const total = parseInt(totalEl.textContent) || 1;
+    const pct = Math.round(_prevDone / total * 100);
+    _lastMilestone = pct >= 75 ? 75 : pct >= 50 ? 50 : pct >= 25 ? 25 : 0;
+  }
 });
 
 /* ── Capture checkbox position BEFORE the swap ────────────────────────────── */
@@ -701,11 +1172,13 @@ async function openHabitEditor(habitId) {
     d.metric_step = data.metric_step;
   }
   overlay.style.display = 'flex';
+  playModalOpenSound();
 }
 
 function closeHabitEditor() {
   const overlay = document.getElementById('habit-edit-overlay');
   if (overlay) overlay.style.display = 'none';
+  playModalCloseSound();
 }
 
 /* ── Category card drag-reorder (mouse-driven for "pick up" feel) ─────────── */
@@ -873,6 +1346,7 @@ function closeHabitEditor() {
       const body = new URLSearchParams();
       orderedIds.forEach(id => body.append('order[]', id));
       fetch('/categories/reorder', { method: 'POST', body: body }).catch(() => {});
+      playDragDropSound();
 
       dragCard = null;
       dropTarget = null;
@@ -917,6 +1391,7 @@ function closeHabitEditor() {
       ['hx-post','hx-get','hx-delete','hx-target','hx-swap','hx-include','hx-trigger','hx-vals'].forEach(a => el.removeAttribute(a));
     });
     document.body.appendChild(clone);
+    playDragPickupSound();
 
     // Leave a placeholder where the card was
     placeholder = document.createElement('div');
@@ -1051,6 +1526,7 @@ function closeHabitEditor() {
       const body = new URLSearchParams();
       orderedIds.forEach(id => body.append('order[]', id));
       fetch('/habits/reorder', { method: 'POST', body }).catch(() => {});
+      playDragDropSound();
 
       dragRow = null;
       dropTarget = null;
@@ -1095,6 +1571,7 @@ function closeHabitEditor() {
       ['hx-post','hx-get','hx-delete','hx-target','hx-swap','hx-include','hx-trigger','hx-vals'].forEach(a => el.removeAttribute(a));
     });
     document.body.appendChild(clone);
+    playDragPickupSound();
 
     placeholder = document.createElement('div');
     placeholder.style.height = rect.height + 'px';

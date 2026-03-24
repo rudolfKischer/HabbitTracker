@@ -3,7 +3,8 @@
   <a href="#" class="date-nav-btn"
      hx-get="/app/week?week={{ week.prev_week }}"
      hx-target="#week-grid-container"
-     hx-swap="innerHTML">&larr;</a>
+     hx-swap="innerHTML"
+     onclick="playDateNavSound()">&larr;</a>
   <span class="week-nav-label">
     {{ week.dates[0][-5:] | replace('-',' / ') }} &ndash; {{ week.dates[6][-5:] | replace('-',' / ') }}
   </span>
@@ -11,7 +12,8 @@
   <a href="#" class="date-nav-btn"
      hx-get="/app/week?week={{ week.next_week }}"
      hx-target="#week-grid-container"
-     hx-swap="innerHTML">&rarr;</a>
+     hx-swap="innerHTML"
+     onclick="playDateNavSound()">&rarr;</a>
   {% else %}
   <span class="date-nav-btn disabled">&rarr;</span>
   {% endif %}
@@ -21,7 +23,7 @@
 <div class="week-grid">
   <div class="week-corner"></div>
   {% for d in week.dates %}
-  <a href="/app?date={{ d }}" class="week-day-label {% if d == log_date %}week-day-active{% endif %}">
+  <a href="/app?date={{ d }}" class="week-day-label {% if d == log_date %}week-day-active{% endif %}{% if today is defined and d > today %} week-day-future{% endif %}">
     {{ ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d | weekday] }}
     <span class="week-day-num">{{ d[-2:] | int }}</span>
   </a>
@@ -37,7 +39,8 @@
   {% elif day.pct <= 50 %}{% set cell_heat = 'heat-2' %}
   {% elif day.pct <= 75 %}{% set cell_heat = 'heat-3' %}
   {% else %}{% set cell_heat = 'heat-4' %}{% endif %}
-  <button class="week-cell {{ cell_heat }}" title="{{ day.date }}: {{ day.pct }}%"
+  {% set is_future = today is defined and day.date > today %}
+  <button class="week-cell {{ cell_heat }}{% if is_future %} week-cell-future{% endif %}" title="{{ day.date }}: {{ day.pct }}%"
      hx-post="/habits/{{ habit.id }}/week-toggle"
      hx-vals='{"log_date": "{{ day.date }}", "week": "{{ week.monday }}"}'
      hx-target="#week-grid-container"
