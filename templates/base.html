@@ -27,12 +27,15 @@
         <h1>Habits</h1>
       </div>
       <nav class="main-nav" id="main-nav">
-        <a href="/app"      class="nav-link {% if active_tab == 'today'    %}active{% endif %}" data-nav="today">Today</a>
-        <a href="/todos"    class="nav-link {% if active_tab == 'todos'    %}active{% endif %}" data-nav="todos">Todos</a>
-        <a href="/trackers" class="nav-link {% if active_tab == 'trackers' %}active{% endif %}" data-nav="trackers">Trackers</a>
-        <a href="/schedule" class="nav-link {% if active_tab == 'schedule' %}active{% endif %}" data-nav="schedule">Schedule</a>
-        <a href="/stats"    class="nav-link {% if active_tab == 'stats'    %}active{% endif %}" data-nav="stats">Stats</a>
-        <a href="/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}" data-nav="settings">Settings</a>
+        <div class="nav-track" id="nav-track">
+          <div class="nav-pill" id="nav-pill"></div>
+          <a href="/app"      class="nav-link {% if active_tab == 'today'    %}active{% endif %}" data-nav="today">Today</a>
+          <a href="/todos"    class="nav-link {% if active_tab == 'todos'    %}active{% endif %}" data-nav="todos">Todos</a>
+          <a href="/trackers" class="nav-link {% if active_tab == 'trackers' %}active{% endif %}" data-nav="trackers">Trackers</a>
+          <a href="/schedule" class="nav-link {% if active_tab == 'schedule' %}active{% endif %}" data-nav="schedule">Schedule</a>
+          <a href="/stats"    class="nav-link {% if active_tab == 'stats'    %}active{% endif %}" data-nav="stats">Stats</a>
+          <a href="/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}" data-nav="settings">Settings</a>
+        </div>
       </nav>
       <div class="header-right">
         <span class="header-date">{{ display_date }}</span>
@@ -155,6 +158,18 @@
         var href = link.getAttribute('href');
         link.classList.toggle('active', href === path || (href === '/app' && path === '/'));
       });
+      updateNavPill();
+    }
+
+    function updateNavPill() {
+      var pill  = document.getElementById('nav-pill');
+      var track = document.getElementById('nav-track');
+      var active = track && track.querySelector('.nav-link.active');
+      if (!pill || !track || !active) return;
+      var tRect = track.getBoundingClientRect();
+      var aRect = active.getBoundingClientRect();
+      pill.style.left  = (aRect.left  - tRect.left)  + 'px';
+      pill.style.width = aRect.width + 'px';
     }
 
     // Intercept nav link clicks
@@ -188,6 +203,14 @@
         // Re-process any HTMX in the new content
         htmx.process(e.detail.target);
       }
+    });
+
+    // Position pill on first paint — suppress transition so it snaps instantly
+    window.addEventListener('load', function() {
+      var pill = document.getElementById('nav-pill');
+      if (pill) pill.style.transition = 'none';
+      updateNavPill();
+      if (pill) requestAnimationFrame(function() { pill.style.transition = ''; });
     });
 
     // Background prefetch: load other nav pages after initial load
