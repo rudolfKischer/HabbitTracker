@@ -2194,6 +2194,16 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   z-index: 2;
 }
 
+.week-cell-future {
+  opacity: 0.3;
+  background: #12151a;
+  border-color: rgba(255,255,255,0.02);
+}
+
+.week-day-future {
+  opacity: 0.35;
+}
+
 .week-cell-na {
   background: transparent;
   border-color: transparent;

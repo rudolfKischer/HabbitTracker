@@ -5,8 +5,24 @@ function getAudioCtx() {
   if (!_audioCtx) {
     _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
+  if (_audioCtx.state === 'suspended') {
+    _audioCtx.resume();
+  }
   return _audioCtx;
 }
+
+// Eagerly unlock AudioContext on first user interaction so hover sounds work
+(function() {
+  function unlock() {
+    getAudioCtx();
+    document.removeEventListener('click', unlock, true);
+    document.removeEventListener('touchstart', unlock, true);
+    document.removeEventListener('keydown', unlock, true);
+  }
+  document.addEventListener('click', unlock, true);
+  document.addEventListener('touchstart', unlock, true);
+  document.addEventListener('keydown', unlock, true);
+})();
 
 /* ── Combo tracker — rising pitch for rapid checks ────────────────────────── */
 let _comboCount = 0;
