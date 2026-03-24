@@ -2057,6 +2057,9 @@ input, textarea, select { font-family: inherit; font-size: inherit; }
   margin-bottom: 8px;
 }
 
+/* Mobile section hidden on desktop */
+.week-overview-mobile { display: none; }
+
 .week-nav {
   display: flex;
   align-items: center;
@@ -3746,8 +3749,9 @@ details[open] .carousel-done-summary::before {
   .heatmap-grid::-webkit-scrollbar { display: none; }
 
 
-  /* Week grid: hide 7-day version, show 3-day mobile version */
-  .week-grid:not(.week-grid-mobile) { display: none; }
+  /* Week overview: desktop section hidden, mobile section shown */
+  .week-overview-desktop { display: none; }
+  .week-overview-mobile { display: block; }
   .week-grid-mobile {
     display: grid;
     padding: 10px;

@@ -378,6 +378,38 @@ def get_week_overview(db: Session, user_id: int, current_date: str) -> dict:
             "prev_week": prev_week, "next_week": next_week}
 
 
+def get_recent_days_overview(db: Session, user_id: int, anchor_date: str, n: int = 3) -> dict:
+    """Return per-habit completion data for the n calendar days ending at anchor_date."""
+    from datetime import date as date_cls
+    d = date_cls.fromisoformat(anchor_date)
+    dates = [(d - timedelta(days=i)).isoformat() for i in range(n - 1, -1, -1)]
+    habits = [h for h in get_habits(db, user_id)]
+    rows = []
+    for h in habits:
+        log_map = {l.log_date: l for l in db.query(HabitLog).filter(
+            HabitLog.habit_id == h.id,
+            HabitLog.log_date.in_(dates),
+        ).all()}
+        days = []
+        for dt in dates:
+            if h.start_date and dt < h.start_date:
+                days.append({"date": dt, "pct": None, "metric_value": None})
+                continue
+            log = log_map.get(dt)
+            if log and log.completed:
+                pct = 100
+            elif log and not log.completed and h.metric_enabled and log.metric_value is not None:
+                goal = log.metric_goal if log.metric_goal else h.metric_default
+                pct = min(round(log.metric_value / goal * 100), 100) if goal else 0
+            else:
+                pct = 0
+            days.append({"date": dt, "pct": pct, "metric_value": log.metric_value if log else None})
+        rows.append({"id": h.id, "name": h.name, "metric_enabled": h.metric_enabled,
+                     "metric_unit": h.metric_unit, "metric_default": h.metric_default,
+                     "days": days})
+    return {"dates": dates, "habits": rows}
+
+
 def get_heatmap_data(db: Session, user_id: int, start_date: str, end_date: str) -> dict:
     habits = db.query(Habit).filter(Habit.user_id == user_id, Habit.active == True).all()
     if not habits:

@@ -190,6 +190,7 @@ async def index(request: Request, db: Session = Depends(get_db),
     habit_groups = database.get_habits_with_logs_grouped(db, user_id, log_date)
     summary = database.get_today_summary(db, user_id, log_date)
     week = database.get_week_overview(db, user_id, log_date)
+    recent_days = database.get_recent_days_overview(db, user_id, log_date, n=3)
     categories = database.get_categories(db, user_id)
     user = database.get_user_by_id(db, user_id)
     # Flat list for backward compat (progress bar, week grid, etc.)
@@ -209,6 +210,7 @@ async def index(request: Request, db: Session = Depends(get_db),
         "user": user,
         "is_guest": request.session.get("is_guest", False),
         "week": week,
+        "recent_days": recent_days,
         "categories": categories,
     })
 
@@ -326,6 +328,26 @@ async def week_toggle(request: Request, habit_id: int,
         "request": request,
         "week": week_data,
         "log_date": page_date,
+    })
+
+
+@app.post("/habits/{habit_id}/recent-toggle", response_class=HTMLResponse)
+async def recent_toggle(request: Request, habit_id: int,
+                        db: Session = Depends(get_db),
+                        log_date: Optional[str] = Form(None)):
+    user_id = await require_user(request, db)
+    if not user_id:
+        return HTMLResponse(status_code=401)
+    log_date = clamp_date(log_date) if log_date else today_str()
+    habit = database.get_habit(db, habit_id, user_id)
+    if not habit:
+        return HTMLResponse(status_code=404)
+    database.toggle_habit(db, habit_id, log_date)
+    recent_days = database.get_recent_days_overview(db, user_id, today_str(), n=3)
+    return templates.TemplateResponse("partials/recent_grid.html", {
+        "request": request,
+        "recent_days": recent_days,
+        "log_date": today_str(),
     })
 
 

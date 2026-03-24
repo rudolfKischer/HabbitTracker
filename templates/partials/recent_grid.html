@@ -1,32 +1,12 @@
-<!-- Week navigation -->
-<div class="week-nav">
-  <a href="#" class="date-nav-btn"
-     hx-get="/app/week?week={{ week.prev_week }}"
-     hx-target="#week-grid-container"
-     hx-swap="innerHTML">&larr;</a>
-  <span class="week-nav-label">
-    {{ week.dates[0][-5:] | replace('-',' / ') }} &ndash; {{ week.dates[6][-5:] | replace('-',' / ') }}
-  </span>
-  {% if week.next_week %}
-  <a href="#" class="date-nav-btn"
-     hx-get="/app/week?week={{ week.next_week }}"
-     hx-target="#week-grid-container"
-     hx-swap="innerHTML">&rarr;</a>
-  {% else %}
-  <span class="date-nav-btn disabled">&rarr;</span>
-  {% endif %}
-</div>
-
-<!-- Full 7-day grid (desktop) -->
-<div class="week-grid">
+<div class="week-grid week-grid-mobile" style="grid-template-columns: minmax(55px, 80px) repeat(3, 1fr)">
   <div class="week-corner"></div>
-  {% for d in week.dates %}
+  {% for d in recent_days.dates %}
   <a href="/app?date={{ d }}" class="week-day-label {% if d == log_date %}week-day-active{% endif %}">
     {{ ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d | weekday] }}
     <span class="week-day-num">{{ d[-2:] | int }}</span>
   </a>
   {% endfor %}
-  {% for habit in week.habits %}
+  {% for habit in recent_days.habits %}
   <div class="week-habit-name">{{ habit.name }}</div>
   {% for day in habit.days %}
   {% if day.pct is none %}
@@ -38,9 +18,9 @@
   {% elif day.pct <= 75 %}{% set cell_heat = 'heat-3' %}
   {% else %}{% set cell_heat = 'heat-4' %}{% endif %}
   <button class="week-cell {{ cell_heat }}" title="{{ day.date }}: {{ day.pct }}%"
-     hx-post="/habits/{{ habit.id }}/week-toggle"
-     hx-vals='{"log_date": "{{ day.date }}", "week": "{{ week.monday }}"}'
-     hx-target="#week-grid-container"
+     hx-post="/habits/{{ habit.id }}/recent-toggle"
+     hx-vals='{"log_date": "{{ day.date }}"}'
+     hx-target="#recent-days-container"
      hx-swap="innerHTML"
      onclick="playWeekCellSound({{ 'false' if day.pct > 0 else 'true' }})">
     {% if day.pct > 0 and habit.metric_enabled and day.metric_value is not none %}
@@ -53,4 +33,3 @@
   {% endfor %}
   {% endfor %}
 </div>
-

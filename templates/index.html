@@ -90,10 +90,21 @@
   {% endif %}
 
   {% if week and week.habits %}
-  <section class="week-overview-section">
+  <!-- Desktop: full 7-day week grid with prev/next navigation -->
+  <section class="week-overview-section week-overview-desktop">
     <h2 class="section-title">Week Overview</h2>
     <div id="week-grid-container">
       {% include "partials/week_grid.html" %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if recent_days and recent_days.habits %}
+  <!-- Mobile: fixed 3-day view (today + 2 prior days, crosses week boundaries) -->
+  <section class="week-overview-section week-overview-mobile">
+    <h2 class="section-title">Recent Days</h2>
+    <div id="recent-days-container">
+      {% include "partials/recent_grid.html" %}
     </div>
   </section>
   {% endif %}
