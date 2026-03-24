@@ -362,18 +362,24 @@ function statsPage(defaultHabitId) {
         grid.style.visibility = 'hidden';
         grid.innerHTML = html;
         if (self.$refs.heatmapSlider) self.$refs.heatmapSlider.style.display = 'none';
-        // Scale strip to fit if tiles overflow
+        // Uniformly scale strip to fit: measure natural (preferred) width,
+        // then shrink the whole strip as a unit if it exceeds the container.
         requestAnimationFrame(function() {
           requestAnimationFrame(function() {
             var strip = grid.querySelector('.heatmap-strip');
             if (!strip) { grid.style.visibility = ''; return; }
             var cw = grid.clientWidth;
-            var sw = strip.scrollWidth;
-            if (sw > cw + 2) {
-              var scale = cw / sw;
+            // Measure natural width: let strip size to content, not flex-fill
+            strip.style.width = 'max-content';
+            var naturalW = strip.scrollWidth;
+            // Restore fill behaviour then apply uniform scale if needed
+            strip.style.width = '';
+            if (naturalW > cw + 2) {
+              var scale = cw / naturalW;
               strip.style.transform = 'scale(' + scale.toFixed(4) + ')';
               strip.style.transformOrigin = 'top left';
-              strip.style.width = (sw * scale) + 'px';
+              // Collapse the extra layout space so the container height stays right
+              strip.style.marginBottom = '-' + Math.round(naturalW * (1 - scale) * 0) + 'px';
             } else {
               strip.style.transform = '';
             }
