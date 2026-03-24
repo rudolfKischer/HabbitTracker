@@ -40,7 +40,10 @@
   {% elif day.pct <= 75 %}{% set cell_heat = 'heat-3' %}
   {% else %}{% set cell_heat = 'heat-4' %}{% endif %}
   {% set is_future = today is defined and day.date > today %}
-  <button class="week-cell {{ cell_heat }}{% if is_future %} week-cell-future{% endif %}" title="{{ day.date }}: {{ day.pct }}%"
+  {% if is_future %}
+  <div class="week-cell week-cell-future"></div>
+  {% else %}
+  <button class="week-cell {{ cell_heat }}" title="{{ day.date }}: {{ day.pct }}%"
      hx-post="/habits/{{ habit.id }}/week-toggle"
      hx-vals='{"log_date": "{{ day.date }}", "week": "{{ week.monday }}"}'
      hx-target="#week-grid-container"
@@ -52,6 +55,7 @@
     <span class="week-cell-check">&#10003;</span>
     {% endif %}
   </button>
+  {% endif %}
   {% endif %}
   {% endfor %}
   {% endfor %}
