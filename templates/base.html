@@ -98,9 +98,11 @@
       btn.style.display = 'none';
     });
 
-    // iOS Safari: show button if not already in standalone mode
-    var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var isIOS       = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var isChromeIOS = /CriOS/i.test(navigator.userAgent); // Chrome on iOS = WebKit, no PWA install
+    var isSafariIOS = isIOS && !isChromeIOS;
     var isStandalone = window.navigator.standalone === true;
+
     if (isIOS && !isStandalone) btn.style.display = '';
 
     btn.addEventListener('click', function() {
@@ -110,8 +112,16 @@
           deferred = null;
           if (r.outcome === 'accepted') btn.style.display = 'none';
         });
-      } else if (isIOS) {
-        // Show iOS instruction tooltip
+      } else if (isChromeIOS) {
+        // Chrome on iOS can't install PWAs — Apple forces all iOS browsers to use WebKit
+        // and only exposes the install hook to Safari itself.
+        var tip = document.getElementById('install-tip');
+        if (tip) {
+          tip.innerHTML = 'Open this page in <strong>Safari</strong> to install &mdash; Chrome on iOS cannot install apps (Apple restriction).';
+          tip.classList.toggle('visible');
+        }
+      } else if (isSafariIOS) {
+        // Show Safari install instructions
         var tip = document.getElementById('install-tip');
         if (tip) {
           tip.classList.toggle('visible');
