@@ -369,18 +369,20 @@ function statsPage(defaultHabitId) {
             var strip = grid.querySelector('.heatmap-strip');
             if (!strip) { grid.style.visibility = ''; return; }
             var cw = grid.clientWidth;
-            // Measure natural width: let strip size to content, not flex-fill
+            // Measure natural (preferred) tile width by letting the strip
+            // size to its content instead of flex-filling the container.
             strip.style.width = 'max-content';
             var naturalW = strip.scrollWidth;
-            // Restore fill behaviour then apply uniform scale if needed
-            strip.style.width = '';
             if (naturalW > cw + 2) {
+              // Keep max-content width so tiles stay at their natural size,
+              // then scale the whole strip to fit. origin=top left means the
+              // scaled content starts at the left edge and fills exactly cw.
+              // Container overflow:hidden clips the unused layout space.
               var scale = cw / naturalW;
               strip.style.transform = 'scale(' + scale.toFixed(4) + ')';
               strip.style.transformOrigin = 'top left';
-              // Collapse the extra layout space so the container height stays right
-              strip.style.marginBottom = '-' + Math.round(naturalW * (1 - scale) * 0) + 'px';
             } else {
+              strip.style.width = '';
               strip.style.transform = '';
             }
             grid.style.visibility = '';

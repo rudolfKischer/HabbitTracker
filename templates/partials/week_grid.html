@@ -54,13 +54,18 @@
   {% endfor %}
 </div>
 
-<!-- Mobile 3-day grid (past 3 days up to log_date) -->
-{% set ns = namespace(cutoff=6) %}
+<!-- Mobile 3-day grid: today + up to 2 prior days; extend forward if
+     early in the week so we always show 3 columns -->
+{% set ns = namespace(cutoff=0, mob_start=0, mob_end=0) %}
 {% for i in range(week.dates | length) %}
   {% if week.dates[i] <= log_date %}{% set ns.cutoff = i %}{% endif %}
 {% endfor %}
-{% set mob_start = [ns.cutoff - 2, 0] | max %}
-{% set mob_indices = range(mob_start, ns.cutoff + 1) | list %}
+{% set ns.mob_start = [ns.cutoff - 2, 0] | max %}
+{% set ns.mob_end = ns.cutoff %}
+{% if ns.mob_end - ns.mob_start < 2 %}
+  {% set ns.mob_end = [ns.mob_start + 2, (week.dates | length) - 1] | min %}
+{% endif %}
+{% set mob_indices = range(ns.mob_start, ns.mob_end + 1) | list %}
 <div class="week-grid week-grid-mobile" style="grid-template-columns: minmax(55px, 80px) repeat({{ mob_indices | length }}, 1fr)">
   <div class="week-corner"></div>
   {% for i in mob_indices %}
