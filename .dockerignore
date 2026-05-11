@@ -3,7 +3,11 @@ venv/
 __pycache__/
 *.pyc
 *.db
-!backups/*.db
 .env
+.git/
+.gitignore
 .claude/
 flytoken.txt
+*.service
+deploy.sh
+README.md

@@ -34,12 +34,17 @@
   {% endfor %}
 
   {% if all_completed %}
-  <div class="todo-section todo-completed-section">
-    <div class="todo-completed-label">Completed</div>
-    {% for todo in all_completed %}
-      {{ render_todo(todo, categories=categories) }}
-    {% endfor %}
-  </div>
+  <details class="todo-completed-section">
+    <summary class="todo-completed-toggle">
+      <span class="todo-completed-label">Completed</span>
+      <span class="todo-completed-count">{{ all_completed|length }}</span>
+    </summary>
+    <div class="todo-section todo-completed-items">
+      {% for todo in all_completed %}
+        {{ render_todo(todo, categories=categories) }}
+      {% endfor %}
+    </div>
+  </details>
   {% endif %}
 
 {% else %}

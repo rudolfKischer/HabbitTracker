@@ -1409,6 +1409,7 @@ function closeHabitEditor() {
 })();
 
 /* ── Habit row drag-reorder (within category cards) ──────────────────────── */
+/* Supports both mouse and touch for mobile/desktop */
 (function() {
   let dragRow = null;
   let clone = null;
@@ -1417,6 +1418,8 @@ function closeHabitEditor() {
   let dropTarget = null;
   let dropBefore = true;
   let parentList = null;
+  let longPressTimer = null;
+  let touchActive = false;
 
   function cleanup() {
     if (clone) clone.remove();
@@ -1430,31 +1433,49 @@ function closeHabitEditor() {
     dragRow = null;
     dropTarget = null;
     parentList = null;
+    touchActive = false;
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onTouchMove);
+    document.removeEventListener('touchend', onTouchEnd);
+    document.removeEventListener('touchcancel', onTouchEnd);
   }
 
   function onMove(e) {
     if (!clone) return;
-    clone.style.left = (e.clientX - offsetX) + 'px';
-    clone.style.top = (e.clientY - offsetY) + 'px';
+    moveClone(e.clientX, e.clientY);
+  }
+
+  function onTouchMove(e) {
+    if (!clone) return;
+    e.preventDefault(); // prevent scrolling while dragging
+    const t = e.touches[0];
+    moveClone(t.clientX, t.clientY);
+  }
+
+  function moveClone(cx, cy) {
+    clone.style.left = (cx - offsetX) + 'px';
+    clone.style.top = (cy - offsetY) + 'px';
 
     clone.style.pointerEvents = 'none';
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const el = document.elementFromPoint(cx, cy);
     clone.style.pointerEvents = '';
     if (!el) return;
     const row = el.closest('.habit-row');
     if (!row || row === dragRow || row === placeholder) return;
-    // Only reorder within the same list
     if (!parentList || !parentList.contains(row)) return;
 
     const rect = row.getBoundingClientRect();
     const mid = rect.top + rect.height / 2;
     dropTarget = row;
-    dropBefore = e.clientY < mid;
+    dropBefore = cy < mid;
   }
 
-  function onUp(e) {
+  function onUp(e) { finishDrag(); }
+  function onTouchEnd(e) { finishDrag(); }
+
+  function finishDrag() {
     if (!dragRow) { cleanup(); return; }
 
     if (!dropTarget || dropTarget === dragRow) {
@@ -1517,7 +1538,7 @@ function closeHabitEditor() {
       clone = null;
       placeholder = null;
 
-      // Save order — collect all habit IDs across all lists on the page
+      // Save order
       const orderedIds = [];
       document.querySelectorAll('.habits-list .habit-row, .habits-done-section .habit-row').forEach(r => {
         const m = r.id.match(/^habit-(\d+)$/);
@@ -1531,30 +1552,22 @@ function closeHabitEditor() {
       dragRow = null;
       dropTarget = null;
       parentList = null;
+      touchActive = false;
     }, 210);
 
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onTouchMove);
+    document.removeEventListener('touchend', onTouchEnd);
+    document.removeEventListener('touchcancel', onTouchEnd);
   }
 
-  document.addEventListener('dragstart', function(e) {
-    if (e.target.closest('.habit-drag-handle')) e.preventDefault();
-  });
-
-  document.addEventListener('mousedown', function(e) {
-    const handle = e.target.closest('.habit-drag-handle');
-    if (!handle) return;
-    const row = handle.closest('.habit-row');
-    if (!row) return;
-    const list = row.closest('.habits-list');
-    if (!list) return;
-    e.preventDefault();
-
+  function startDrag(row, list, cx, cy) {
     dragRow = row;
     parentList = list;
     const rect = row.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
+    offsetX = cx - rect.left;
+    offsetY = cy - rect.top;
 
     clone = row.cloneNode(true);
     clone.style.position = 'fixed';
@@ -1580,8 +1593,84 @@ function closeHabitEditor() {
     list.insertBefore(placeholder, row);
 
     row.style.display = 'none';
+  }
 
+  document.addEventListener('dragstart', function(e) {
+    if (e.target.closest('.habit-drag-handle')) e.preventDefault();
+  });
+
+  // Mouse-based drag (desktop)
+  document.addEventListener('mousedown', function(e) {
+    const handle = e.target.closest('.habit-drag-handle');
+    if (!handle) return;
+    const row = handle.closest('.habit-row');
+    if (!row) return;
+    const list = row.closest('.habits-list');
+    if (!list) return;
+    e.preventDefault();
+
+    startDrag(row, list, e.clientX, e.clientY);
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
+
+  // Touch-based drag (mobile) — long-press on habit row to initiate
+  document.addEventListener('touchstart', function(e) {
+    // If touching a drag handle, start immediately
+    const handle = e.target.closest('.habit-drag-handle');
+    const row = handle ? handle.closest('.habit-row') : null;
+    if (handle && row) {
+      const list = row.closest('.habits-list');
+      if (!list) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      touchActive = true;
+      startDrag(row, list, t.clientX, t.clientY);
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
+      return;
+    }
+
+    // Otherwise, long-press on habit row to start drag
+    const habitRow = e.target.closest('.habit-row');
+    if (!habitRow) return;
+    // Don't interfere with checkboxes, buttons, links
+    if (e.target.closest('button, a, input, select, .checkbox-box')) return;
+    const habitList = habitRow.closest('.habits-list');
+    if (!habitList) return;
+
+    const t = e.touches[0];
+    const startX = t.clientX, startY = t.clientY;
+
+    longPressTimer = setTimeout(function() {
+      longPressTimer = null;
+      touchActive = true;
+      // Vibrate if available for haptic feedback
+      if (navigator.vibrate) navigator.vibrate(30);
+      startDrag(habitRow, habitList, startX, startY);
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
+    }, 400);
+
+    // Cancel long-press if finger moves too much
+    function cancelLongPress(ev) {
+      if (!longPressTimer) return;
+      const ct = ev.touches[0];
+      if (Math.abs(ct.clientX - startX) > 10 || Math.abs(ct.clientY - startY) > 10) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        document.removeEventListener('touchmove', cancelLongPress);
+      }
+    }
+    document.addEventListener('touchmove', cancelLongPress, { passive: true });
+    // Also cancel on touchend
+    function cancelOnEnd() {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      document.removeEventListener('touchmove', cancelLongPress);
+      document.removeEventListener('touchend', cancelOnEnd);
+    }
+    document.addEventListener('touchend', cancelOnEnd, { once: true });
+  }, { passive: false });
 })();

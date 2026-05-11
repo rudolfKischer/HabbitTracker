@@ -11,8 +11,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Tally" />
-  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="apple-touch-icon" href="/icon.png" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
 
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
   <script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" defer></script>
@@ -24,8 +24,14 @@
   <header class="site-header">
     <div class="header-inner">
       <div class="header-title">
-        <span class="header-icon">&#9670;</span>
-        <h1>Habits</h1>
+        <svg class="header-icon-svg" width="18" height="18" viewBox="0 0 32 32">
+          <line x1="7" y1="6" x2="7" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <line x1="13" y1="6" x2="13" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <line x1="19" y1="6" x2="19" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <line x1="25" y1="6" x2="25" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <line x1="3" y1="22" x2="29" y2="8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <h1>Daily Tally</h1>
       </div>
       <nav class="main-nav" id="main-nav">
         <div class="nav-track" id="nav-track">

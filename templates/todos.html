@@ -155,6 +155,53 @@ function refreshCarousel() {
   document.addEventListener('htmx:afterSwap', function(e) {
     if (isCarouselMode()) refreshCarousel();
   });
+
+  // Preserve scroll position on todo list swaps
+  let savedScrollTop = null;
+  document.addEventListener('htmx:beforeSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'todo-list') {
+      savedScrollTop = window.scrollY;
+    }
+  });
+  document.addEventListener('htmx:afterSettle', function(e) {
+    if (savedScrollTop !== null && e.detail.target && e.detail.target.id === 'todo-list') {
+      window.scrollTo(0, savedScrollTop);
+      savedScrollTop = null;
+      // Restore completed section open state
+      var details = document.querySelector('#todo-list .todo-completed-section');
+      if (details && localStorage.getItem('todoCompletedOpen') === '1') {
+        details.open = true;
+      }
+    }
+  });
+
+  // Track completed section open/close state
+  document.addEventListener('toggle', function(e) {
+    if (e.target.classList && e.target.classList.contains('todo-completed-section')) {
+      localStorage.setItem('todoCompletedOpen', e.target.open ? '1' : '0');
+    }
+  }, true);
+
+  // Animate todo items when checking off — collapse + fade before swap
+  document.addEventListener('htmx:beforeRequest', function(e) {
+    const trigger = e.detail.elt;
+    if (!trigger.classList.contains('todo-checkbox')) return;
+    // Only animate when checking off (not unchecking)
+    if (trigger.classList.contains('checked')) return;
+
+    const todoItem = trigger.closest('.todo-item');
+    if (!todoItem) return;
+
+    // Animate the item collapsing
+    const h = todoItem.offsetHeight;
+    todoItem.style.maxHeight = h + 'px';
+    todoItem.style.overflow = 'hidden';
+    todoItem.style.transition = 'max-height 300ms ease, opacity 300ms ease';
+    requestAnimationFrame(function() {
+      todoItem.style.maxHeight = '0px';
+      todoItem.style.opacity = '0';
+    });
+  });
 })();
 
 // ── Carousel logic ──
@@ -261,10 +308,15 @@ function todoCarousel() {
 }
 
 // ── Drag and drop for reparenting / reordering todos ──
+// Supports both HTML5 drag-and-drop (desktop) and touch events (mobile)
 (function() {
   let dragId = null;
   let dragEl = null;
   let dropIndicator = null;
+  let touchClone = null;
+  let touchLongPress = null;
+  let touchMode = null; // 'before', 'after', 'into'
+  let touchTargetId = null;
 
   function getIndicator() {
     if (!dropIndicator) {
@@ -280,6 +332,99 @@ function todoCarousel() {
     }
   }
 
+  function cleanupTouch() {
+    if (touchClone) { touchClone.remove(); touchClone = null; }
+    if (dragEl) dragEl.classList.remove('todo-dragging');
+    document.querySelectorAll('.todo-drop-into').forEach(el => el.classList.remove('todo-drop-into'));
+    removeIndicator();
+    dragId = null;
+    dragEl = null;
+    touchMode = null;
+    touchTargetId = null;
+  }
+
+  function updateDropTarget(cx, cy) {
+    if (touchClone) {
+      touchClone.style.pointerEvents = 'none';
+    }
+    const el = document.elementFromPoint(cx, cy);
+    if (touchClone) {
+      touchClone.style.pointerEvents = '';
+    }
+    if (!el) return;
+    const item = el.closest('.todo-item');
+    if (!item || item.dataset.todoId === dragId) {
+      document.querySelectorAll('.todo-drop-into').forEach(el => el.classList.remove('todo-drop-into'));
+      removeIndicator();
+      touchMode = null;
+      touchTargetId = null;
+      return;
+    }
+    if (item.closest('#todo-' + dragId)) return;
+
+    const rect = item.querySelector('.todo-main').getBoundingClientRect();
+    const y = cy - rect.top;
+    const h = rect.height;
+    const indicator = getIndicator();
+
+    if (y < h * 0.25) {
+      indicator.dataset.mode = 'before';
+      indicator.dataset.targetId = item.dataset.todoId;
+      indicator.style.left = rect.left + 'px';
+      indicator.style.width = rect.width + 'px';
+      item.querySelector('.todo-main').before(indicator);
+      item.classList.remove('todo-drop-into');
+    } else if (y > h * 0.75) {
+      indicator.dataset.mode = 'after';
+      indicator.dataset.targetId = item.dataset.todoId;
+      indicator.style.left = rect.left + 'px';
+      indicator.style.width = rect.width + 'px';
+      item.querySelector('.todo-main').after(indicator);
+      item.classList.remove('todo-drop-into');
+    } else {
+      indicator.dataset.mode = 'into';
+      indicator.dataset.targetId = item.dataset.todoId;
+      removeIndicator();
+      item.classList.add('todo-drop-into');
+    }
+    touchMode = indicator.dataset.mode;
+    touchTargetId = indicator.dataset.targetId;
+  }
+
+  function executeDrop(mode, targetId) {
+    document.querySelectorAll('.todo-drop-into').forEach(el => el.classList.remove('todo-drop-into'));
+    removeIndicator();
+
+    const formData = new FormData();
+    if (mode === 'into') {
+      formData.set('parent_id', targetId);
+    } else if (mode === 'before') {
+      const target = document.querySelector('[data-todo-id="' + targetId + '"]');
+      const parentItem = target ? target.parentElement.closest('.todo-item') : null;
+      if (parentItem) formData.set('parent_id', parentItem.dataset.todoId);
+      formData.set('before_id', targetId);
+    } else {
+      const target = document.querySelector('[data-todo-id="' + targetId + '"]');
+      const parentItem = target ? target.parentElement.closest('.todo-item') : null;
+      if (parentItem) formData.set('parent_id', parentItem.dataset.todoId);
+      let next = target ? target.nextElementSibling : null;
+      while (next && !next.classList.contains('todo-item')) next = next.nextElementSibling;
+      if (next && next.dataset.todoId) formData.set('before_id', next.dataset.todoId);
+    }
+
+    fetch('/todos/' + dragId + '/move', { method: 'POST', body: formData })
+      .then(r => r.text())
+      .then(html => {
+        if ((localStorage.getItem('todoViewMode') || 'list') === 'carousel') {
+          location.reload(); return;
+        }
+        const list = document.getElementById('todo-list');
+        list.innerHTML = html;
+        htmx.process(list);
+      });
+  }
+
+  // ── HTML5 drag-and-drop (desktop) ──
   document.addEventListener('dragstart', function(e) {
     const item = e.target.closest('.todo-item');
     if (!item) return;
@@ -301,40 +446,10 @@ function todoCarousel() {
     if (!dragId) return;
     const item = e.target.closest('.todo-item');
     if (!item || item.dataset.todoId === dragId) return;
-    // Don't allow dropping onto own descendants
     if (item.closest('#todo-' + dragId)) return;
-
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-
-    const rect = item.querySelector('.todo-main').getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const h = rect.height;
-    const indicator = getIndicator();
-
-    if (y < h * 0.25) {
-      // Drop BEFORE this item (same level)
-      indicator.dataset.mode = 'before';
-      indicator.dataset.targetId = item.dataset.todoId;
-      indicator.style.left = rect.left + 'px';
-      indicator.style.width = rect.width + 'px';
-      item.querySelector('.todo-main').before(indicator);
-      item.classList.remove('todo-drop-into');
-    } else if (y > h * 0.75) {
-      // Drop AFTER this item (same level)
-      indicator.dataset.mode = 'after';
-      indicator.dataset.targetId = item.dataset.todoId;
-      indicator.style.left = rect.left + 'px';
-      indicator.style.width = rect.width + 'px';
-      item.querySelector('.todo-main').after(indicator);
-      item.classList.remove('todo-drop-into');
-    } else {
-      // Drop INTO this item (make it a child)
-      indicator.dataset.mode = 'into';
-      indicator.dataset.targetId = item.dataset.todoId;
-      removeIndicator();
-      item.classList.add('todo-drop-into');
-    }
+    updateDropTarget(e.clientX, e.clientY);
   });
 
   document.addEventListener('dragleave', function(e) {
@@ -351,44 +466,95 @@ function todoCarousel() {
 
     const indicator = getIndicator();
     const mode = indicator.dataset.mode || 'into';
-    const targetId = indicator.dataset.targetId || targetItem.dataset.todoId;
-
-    // Clean up visual state
-    document.querySelectorAll('.todo-drop-into').forEach(el => el.classList.remove('todo-drop-into'));
-    removeIndicator();
-
-    // Build the move request
-    const formData = new FormData();
-    if (mode === 'into') {
-      formData.set('parent_id', targetId);
-    } else if (mode === 'before') {
-      // Same parent as target, place before it
-      const target = document.querySelector('[data-todo-id="' + targetId + '"]');
-      const parentItem = target ? target.parentElement.closest('.todo-item') : null;
-      if (parentItem) formData.set('parent_id', parentItem.dataset.todoId);
-      formData.set('before_id', targetId);
-    } else {
-      // 'after' — same parent as target, place after (before the next sibling)
-      const target = document.querySelector('[data-todo-id="' + targetId + '"]');
-      const parentItem = target ? target.parentElement.closest('.todo-item') : null;
-      if (parentItem) formData.set('parent_id', parentItem.dataset.todoId);
-      // Find the next sibling todo at the same level
-      let next = target ? target.nextElementSibling : null;
-      while (next && !next.classList.contains('todo-item')) next = next.nextElementSibling;
-      if (next && next.dataset.todoId) formData.set('before_id', next.dataset.todoId);
-    }
-
-    fetch('/todos/' + dragId + '/move', { method: 'POST', body: formData })
-      .then(r => r.text())
-      .then(html => {
-        if ((localStorage.getItem('todoViewMode') || 'list') === 'carousel') {
-          location.reload(); return;
-        }
-        const list = document.getElementById('todo-list');
-        list.innerHTML = html;
-        htmx.process(list);
-      });
+    const tid = indicator.dataset.targetId || targetItem.dataset.todoId;
+    const saveDragId = dragId;
+    dragId = saveDragId; // keep for executeDrop
+    executeDrop(mode, tid);
+    if (dragEl) dragEl.classList.remove('todo-dragging');
+    dragEl = null;
   });
+
+  // ── Touch drag (mobile) — long-press on todo drag handle ──
+  document.addEventListener('touchstart', function(e) {
+    const handle = e.target.closest('.todo-drag-handle');
+    if (!handle) return;
+    const item = handle.closest('.todo-item');
+    if (!item) return;
+
+    const t = e.touches[0];
+    const startX = t.clientX, startY = t.clientY;
+
+    touchLongPress = setTimeout(function() {
+      touchLongPress = null;
+      dragId = item.dataset.todoId;
+      dragEl = item;
+      item.classList.add('todo-dragging');
+      if (navigator.vibrate) navigator.vibrate(30);
+      playDragPickupSound();
+
+      // Create floating clone
+      const rect = item.getBoundingClientRect();
+      touchClone = item.cloneNode(true);
+      touchClone.style.position = 'fixed';
+      touchClone.style.top = rect.top + 'px';
+      touchClone.style.left = rect.left + 'px';
+      touchClone.style.width = rect.width + 'px';
+      touchClone.style.zIndex = '9999';
+      touchClone.style.opacity = '0.85';
+      touchClone.style.pointerEvents = 'none';
+      touchClone.style.transform = 'scale(1.02)';
+      touchClone.style.boxShadow = '0 8px 30px rgba(0,0,0,0.35)';
+      touchClone.style.borderRadius = '8px';
+      touchClone.style.background = 'var(--surface)';
+      // Strip HTMX attributes from clone
+      touchClone.querySelectorAll('[hx-post],[hx-get],[hx-delete],[hx-target]').forEach(el => {
+        ['hx-post','hx-get','hx-delete','hx-target','hx-swap','hx-include','hx-trigger','hx-vals'].forEach(a => el.removeAttribute(a));
+      });
+      document.body.appendChild(touchClone);
+
+      document.addEventListener('touchmove', onTodoTouchMove, { passive: false });
+      document.addEventListener('touchend', onTodoTouchEnd);
+      document.addEventListener('touchcancel', onTodoTouchEnd);
+    }, 300);
+
+    function cancelPress(ev) {
+      if (!touchLongPress) return;
+      const ct = ev.touches[0];
+      if (Math.abs(ct.clientX - startX) > 10 || Math.abs(ct.clientY - startY) > 10) {
+        clearTimeout(touchLongPress);
+        touchLongPress = null;
+        document.removeEventListener('touchmove', cancelPress);
+      }
+    }
+    document.addEventListener('touchmove', cancelPress, { passive: true });
+    function cancelEnd() {
+      if (touchLongPress) { clearTimeout(touchLongPress); touchLongPress = null; }
+      document.removeEventListener('touchmove', cancelPress);
+      document.removeEventListener('touchend', cancelEnd);
+    }
+    document.addEventListener('touchend', cancelEnd, { once: true });
+  }, { passive: true });
+
+  function onTodoTouchMove(e) {
+    if (!dragId || !touchClone) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    touchClone.style.left = (t.clientX - touchClone.offsetWidth / 2) + 'px';
+    touchClone.style.top = (t.clientY - 20) + 'px';
+    updateDropTarget(t.clientX, t.clientY);
+  }
+
+  function onTodoTouchEnd(e) {
+    document.removeEventListener('touchmove', onTodoTouchMove);
+    document.removeEventListener('touchend', onTodoTouchEnd);
+    document.removeEventListener('touchcancel', onTodoTouchEnd);
+
+    if (dragId && touchMode && touchTargetId) {
+      playDragDropSound();
+      executeDrop(touchMode, touchTargetId);
+    }
+    cleanupTouch();
+  }
 })();
 
 // ── Inline editing ──

@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, Request, Form, Depends
+from fastapi import FastAPI, Request, Form, Depends, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -21,6 +21,10 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SECRET_KEY", "dev-secret-change-me"),
 )
+
+# Trust proxy headers so request.url_for() generates https:// behind Fly's TLS proxy
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 templates.env.filters["weekday"] = lambda s: date.fromisoformat(s).weekday()
@@ -175,6 +179,55 @@ async def landing(request: Request):
         "google_enabled": is_google_configured(),
         "dev_mode": is_dev_mode(),
     })
+
+
+# ── Dynamic app icon ──────────────────────────────────────────────────────────
+
+THEME_COLORS = {
+    "green": "#39d353", "teal": "#2dd4bf", "cyan": "#22d3ee", "blue": "#60a5fa",
+    "purple": "#a78bfa", "pink": "#f472b6", "orange": "#fb923c", "yellow": "#facc15",
+}
+
+def _tally_svg(color: str, size: int = 180) -> str:
+    r = size * 6 // 32
+    pad = size * 3 // 32
+    inner = size * 26 // 32
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size} {size}">
+  <rect width="{size}" height="{size}" rx="{r}" fill="#0f0f0f"/>
+  <g transform="translate({pad},{pad})">
+    <svg viewBox="0 0 32 32" width="{inner}" height="{inner}">
+      <line x1="7" y1="6" x2="7" y2="26" stroke="{color}" stroke-width="3" stroke-linecap="round"/>
+      <line x1="13" y1="6" x2="13" y2="26" stroke="{color}" stroke-width="3" stroke-linecap="round"/>
+      <line x1="19" y1="6" x2="19" y2="26" stroke="{color}" stroke-width="3" stroke-linecap="round"/>
+      <line x1="25" y1="6" x2="25" y2="26" stroke="{color}" stroke-width="3" stroke-linecap="round"/>
+      <line x1="3" y1="22" x2="29" y2="8" stroke="{color}" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+  </g>
+</svg>'''
+
+@app.get("/icon.svg")
+async def dynamic_icon_svg(request: Request, db: Session = Depends(get_db)):
+    user_id = get_current_user_id(request)
+    color = THEME_COLORS["green"]
+    if user_id:
+        user = database.get_user_by_id(db, user_id)
+        if user and user.theme_color:
+            color = THEME_COLORS.get(user.theme_color, color)
+    svg = _tally_svg(color)
+    return Response(content=svg, media_type="image/svg+xml")
+
+@app.get("/icon.png")
+async def dynamic_icon_png(request: Request, db: Session = Depends(get_db)):
+    import cairosvg
+    user_id = get_current_user_id(request)
+    color = THEME_COLORS["green"]
+    if user_id:
+        user = database.get_user_by_id(db, user_id)
+        if user and user.theme_color:
+            color = THEME_COLORS.get(user.theme_color, color)
+    svg = _tally_svg(color, size=180)
+    png = cairosvg.svg2png(bytestring=svg.encode(), output_width=180, output_height=180)
+    return Response(content=png, media_type="image/png")
 
 
 # ── App pages ─────────────────────────────────────────────────────────────────
@@ -447,13 +500,26 @@ async def save_log(
 
     database.save_log_detail(db, habit_id, log_date, rating, metric_value, notes)
     log = database.get_log(db, habit_id, log_date)
-    return templates.TemplateResponse("partials/habit_detail.html", {
+
+    # Return both the detail panel and an HX-Trigger to update the habit row
+    habits = database.get_habits_with_logs(db, user_id, log_date)
+    habit_data = next((h for h in habits if h["id"] == habit_id), None)
+    detail_html = templates.TemplateResponse("partials/habit_detail.html", {
         "request": request,
         "habit": habit,
         "log": log,
         "log_date": log_date,
         "saved": True,
     })
+    # Trigger an out-of-band swap to update the habit row's checkbox and badge
+    row_html = templates.TemplateResponse("partials/habit_row_oob.html", {
+        "request": request,
+        "habit": habit_data,
+        "log_date": log_date,
+    })
+    detail_body = detail_html.body.decode()
+    row_body = row_html.body.decode()
+    return HTMLResponse(detail_body + row_body)
 
 
 # ── Habit CRUD ────────────────────────────────────────────────────────────────

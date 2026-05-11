@@ -8,7 +8,7 @@
 <div class="habit-row" id="habit-{{ habit.id }}"
      data-category-id="{{ habit.category_id or '' }}"
      x-data="{ open: false }">
-  <div class="habit-main">
+  <div class="habit-main" id="habit-{{ habit.id }}-main">
     <span class="habit-drag-handle" title="Drag to reorder">&#8942;&#8942;</span>
     <form style="display:contents">
       <input type="hidden" name="log_date" value="{{ log_date }}" />

@@ -3,7 +3,9 @@ uvicorn[standard]
 jinja2
 python-multipart
 sqlalchemy
+starlette<1.0.0
 authlib
 httpx
 itsdangerous
 python-dotenv
+cairosvg

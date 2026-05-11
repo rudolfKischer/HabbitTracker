@@ -3,14 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Habits - Sign In</title>
+  <title>Daily Tally - Sign In</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
   <div class="login-container">
     <div class="login-card">
-      <span class="login-icon">&#9670;</span>
-      <h1 class="login-title">Habits</h1>
+      <svg class="login-icon-svg" width="32" height="32" viewBox="0 0 32 32">
+        <line x1="7" y1="6" x2="7" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        <line x1="13" y1="6" x2="13" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        <line x1="19" y1="6" x2="19" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        <line x1="25" y1="6" x2="25" y2="26" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        <line x1="3" y1="22" x2="29" y2="8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <h1 class="login-title">Daily Tally</h1>
       <p class="login-subtitle">Sign in to track your habits</p>
 
       {% if google_enabled %}

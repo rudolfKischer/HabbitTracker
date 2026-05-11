@@ -1,0 +1,37 @@
+name: Weekly DB Backup
+
+on:
+  schedule:
+    - cron: '0 6 * * 0'  # Every Sunday at 6am UTC
+  workflow_dispatch:       # Allow manual trigger
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Download database from Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          # Wake the machine
+          curl -s -o /dev/null https://dailytally.link/ || true
+          sleep 5
+          # Download the DB via SSH
+          fly ssh sftp get /data/habits.db backups/habits.db -a habbittracker
+
+      - name: Commit backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p backups
+          git add backups/habits.db
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "backup: habits.db $(date -u +%Y-%m-%d)"
+          git push

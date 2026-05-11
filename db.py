@@ -241,7 +241,9 @@ def toggle_habit(db: Session, habit_id: int, log_date: str) -> HabitLog:
         if log.metric_goal is None:
             log.metric_goal = habit.metric_default
         goal = log.metric_goal
-        log.metric_value = goal if log.completed else 0
+        # Only set metric_value if user hasn't entered one yet
+        if log.metric_value is None or log.metric_value == 0:
+            log.metric_value = goal if log.completed else 0
 
     db.commit()
     db.refresh(log)
