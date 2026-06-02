@@ -19,7 +19,7 @@
   {% else %}{% set cell_heat = 'heat-4' %}{% endif %}
   <button class="week-cell {{ cell_heat }}" title="{{ day.date }}: {{ day.pct }}%"
      hx-post="/habits/{{ habit.id }}/recent-toggle"
-     hx-vals='{"log_date": "{{ day.date }}"}'
+     hx-vals='{"log_date": "{{ day.date }}", "page_date": "{{ log_date }}"}'
      hx-target="#recent-days-container"
      hx-swap="innerHTML"
      onclick="playWeekCellSound({{ 'false' if day.pct > 0 else 'true' }})">

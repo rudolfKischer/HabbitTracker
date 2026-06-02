@@ -122,7 +122,7 @@ def get_habit(db: Session, habit_id: int, user_id: int) -> Habit:
 
 def create_habit(db: Session, user_id: int, name: str, description: str,
                  metric_enabled: bool, metric_unit: str, metric_default,
-                 metric_max, metric_step) -> Habit:
+                 metric_max, metric_step, start_date: str | None = None) -> Habit:
     max_order = (
         db.query(func.coalesce(func.max(Habit.order_index), 0))
         .filter(Habit.user_id == user_id)
@@ -138,7 +138,7 @@ def create_habit(db: Session, user_id: int, name: str, description: str,
         metric_max=float(metric_max) if metric_max else None,
         metric_step=float(metric_step) if metric_step else 0.5,
         order_index=max_order + 1,
-        start_date=datetime.now().date().isoformat(),
+        start_date=start_date or datetime.now().date().isoformat(),
     )
     db.add(habit)
     db.commit()
@@ -241,9 +241,11 @@ def toggle_habit(db: Session, habit_id: int, log_date: str) -> HabitLog:
         if log.metric_goal is None:
             log.metric_goal = habit.metric_default
         goal = log.metric_goal
-        # Only set metric_value if user hasn't entered one yet
-        if log.metric_value is None or log.metric_value == 0:
-            log.metric_value = goal if log.completed else 0
+        if log.completed:
+            if log.metric_value is None or log.metric_value == 0:
+                log.metric_value = goal
+        else:
+            log.metric_value = 0
 
     db.commit()
     db.refresh(log)
