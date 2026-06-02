@@ -1,6 +1,6 @@
 # HabbitTracker
 
-Personal habit tracking app. Live at https://dailytally.duckdns.org
+Personal habit tracking app. Live at https://dailytally.link
 
 ## Google OAuth
 - https://console.cloud.google.com/auth/clients?project=habbittracker-490406
@@ -9,68 +9,42 @@ Personal habit tracking app. Live at https://dailytally.duckdns.org
 
 ## Deployment
 
-Runs on a Raspberry Pi via systemd + nginx + Let's Encrypt.
+Runs on [Fly.io](https://fly.io) as app `habbittracker` (region `yyz`). The
+SQLite DB lives on the `habbittracker_data` persistent volume mounted at
+`/data` — see `fly.toml` and `Dockerfile`.
+
+### Deploy
+
+Deploys run automatically when a pull request is **merged into `main`** via
+`.github/workflows/deploy.yml` (uses the `FLY_API_TOKEN` repo secret). The
+workflow can also be triggered manually from the Actions tab.
+
+To deploy from your machine without going through GitHub:
+
+```bash
+fly deploy
+```
 
 ### App status & logs
-```bash
-# Status
-sudo systemctl status habittracker
-
-# Live logs
-sudo journalctl -u habittracker -f
-```
-
-### Nginx status & logs
-```bash
-# Status
-sudo systemctl status nginx
-
-# Access logs
-sudo tail -f /var/log/nginx/access.log
-
-# Error logs
-sudo tail -f /var/log/nginx/error.log
-```
-
-### Restart services
-```bash
-# Restart app after code changes
-sudo systemctl restart habittracker
-
-# Restart nginx after config changes only
-sudo systemctl restart nginx
-```
-
-### Auto-deploy (push from anywhere)
-The Pi checks GitHub every minute and auto-deploys any new commits on `main`.
-
-**Workflow:**
-1. Make changes on any machine
-2. `git push origin main`
-3. Within ~1 minute the live site updates automatically
-
-**How it works:**
-`deploy.sh` runs via cron every minute. It fetches `origin/main` and compares
-with the local HEAD. If there are new commits it pulls and restarts the service.
 
 ```bash
-# Watch deploy logs
-tail -f ~/deploy.log
-
-# Run manually
-~/deploy.sh
+fly status -a habbittracker
+fly logs -a habbittracker
 ```
 
-### DuckDNS
-- Subdomain: dailytally
-- Domain: dailytally.duckdns.org
-- Dashboard: https://www.duckdns.org
-- Token: stored in ~/duckdns-update.sh (keep secret)
-- IP update script: ~/duckdns-update.sh (runs every 5 min via cron)
-- Update log: ~/duckdns.log
+### SSH into the machine
 
-### SSL cert
-Managed by certbot, auto-renews every 90 days.
 ```bash
-sudo certbot renew --dry-run  # test renewal
+fly ssh console -a habbittracker
 ```
+
+### Database backup
+
+Weekly backup runs via `.github/workflows/backup-db.yml` — it pulls
+`/data/habits.db` from the Fly machine via `fly ssh sftp` and commits it to
+`backups/habits.db`. Can also be triggered manually from the Actions tab.
+
+### SSL / Domain
+
+TLS is terminated by Fly. The custom domain `dailytally.link` points at the
+Fly app via a CNAME / A+AAAA cert managed through `fly certs`.

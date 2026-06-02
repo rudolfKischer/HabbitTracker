@@ -1,7 +1,7 @@
 <!-- Week navigation -->
 <div class="week-nav">
   <a href="#" class="date-nav-btn"
-     hx-get="/app/week?week={{ week.prev_week }}"
+     hx-get="/app/week?week={{ week.prev_week }}&page_date={{ log_date }}"
      hx-target="#week-grid-container"
      hx-swap="innerHTML"
      onclick="playDateNavSound()">&larr;</a>
@@ -10,7 +10,7 @@
   </span>
   {% if week.next_week %}
   <a href="#" class="date-nav-btn"
-     hx-get="/app/week?week={{ week.next_week }}"
+     hx-get="/app/week?week={{ week.next_week }}&page_date={{ log_date }}"
      hx-target="#week-grid-container"
      hx-swap="innerHTML"
      onclick="playDateNavSound()">&rarr;</a>
@@ -45,7 +45,7 @@
   {% else %}
   <button class="week-cell {{ cell_heat }}" title="{{ day.date }}: {{ day.pct }}%"
      hx-post="/habits/{{ habit.id }}/week-toggle"
-     hx-vals='{"log_date": "{{ day.date }}", "week": "{{ week.monday }}"}'
+     hx-vals='{"log_date": "{{ day.date }}", "week": "{{ week.monday }}", "page_date": "{{ log_date }}"}'
      hx-target="#week-grid-container"
      hx-swap="innerHTML"
      onclick="playWeekCellSound({{ 'false' if day.pct > 0 else 'true' }})">

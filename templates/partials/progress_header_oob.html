@@ -1,0 +1,12 @@
+<div id="progress-header" hx-swap-oob="innerHTML">
+  <div class="progress-label">
+    <span class="progress-count">
+      <span id="done-count">{{ summary.done }}</span> / <span id="total-count">{{ summary.total }}</span>
+    </span>
+    <span class="progress-text">completed</span>
+  </div>
+  <div class="progress-bar-track">
+    <div class="progress-bar-fill" id="progress-bar"
+         style="width: {{ (summary.done / summary.total * 100) | round if summary.total > 0 else 0 }}%"></div>
+  </div>
+</div>

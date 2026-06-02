@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 import db as database
@@ -42,14 +43,31 @@ def get_db():
         db.close()
 
 
-def today_str():
-    return datetime.now().strftime("%Y-%m-%d")
+def _user_tz(request: Request) -> ZoneInfo | None:
+    """Read the IANA timezone from the cookie set by the browser."""
+    tz_name = request.cookies.get("tz")
+    if tz_name:
+        try:
+            return ZoneInfo(tz_name)
+        except (KeyError, Exception):
+            pass
+    return None
 
 
-def display_date_label(date_str: str) -> str:
+def _today(request: Request) -> date:
+    """Return today's date in the user's timezone (falls back to UTC)."""
+    tz = _user_tz(request) or ZoneInfo("UTC")
+    return datetime.now(tz).date()
+
+
+def today_str(request: Request) -> str:
+    return _today(request).isoformat()
+
+
+def display_date_label(date_str: str, request: Request) -> str:
     """Return 'Today', 'Yesterday', or the formatted date."""
     d = date.fromisoformat(date_str)
-    t = date.today()
+    t = _today(request)
     if d == t:
         return "Today"
     if d == t - timedelta(days=1):
@@ -57,10 +75,10 @@ def display_date_label(date_str: str) -> str:
     return d.strftime("%A, %B %-d")
 
 
-def clamp_date(date_str: str) -> str:
+def clamp_date(date_str: str, request: Request) -> str:
     """Ensure date doesn't go into the future."""
     d = date.fromisoformat(date_str)
-    t = date.today()
+    t = _today(request)
     if d > t:
         return t.isoformat()
     return date_str
@@ -70,9 +88,9 @@ def prev_date(date_str: str) -> str:
     return (date.fromisoformat(date_str) - timedelta(days=1)).isoformat()
 
 
-def next_date(date_str: str) -> str | None:
+def next_date(date_str: str, request: Request) -> str | None:
     n = date.fromisoformat(date_str) + timedelta(days=1)
-    if n > date.today():
+    if n > _today(request):
         return None
     return n.isoformat()
 
@@ -239,7 +257,7 @@ async def index(request: Request, db: Session = Depends(get_db),
     if not user_id:
         return RedirectResponse("/")
 
-    log_date = clamp_date(date) if date else today_str()
+    log_date = clamp_date(date, request) if date else today_str(request)
     habit_groups = database.get_habits_with_logs_grouped(db, user_id, log_date)
     summary = database.get_today_summary(db, user_id, log_date)
     week = database.get_week_overview(db, user_id, log_date)
@@ -256,16 +274,16 @@ async def index(request: Request, db: Session = Depends(get_db),
         "habit_groups": habit_groups,
         "summary": summary,
         "log_date": log_date,
-        "display_date": display_date_label(log_date),
+        "display_date": display_date_label(log_date, request),
         "prev_date": prev_date(log_date),
-        "next_date": next_date(log_date),
-        "is_today": log_date == today_str(),
+        "next_date": next_date(log_date, request),
+        "is_today": log_date == today_str(request),
         "user": user,
         "is_guest": request.session.get("is_guest", False),
         "week": week,
         "recent_days": recent_days,
         "categories": categories,
-        "today": today_str(),
+        "today": today_str(request),
     })
 
 
@@ -280,7 +298,7 @@ async def stats_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("stats.html", {
         "request": request,
         "habits": habits,
-        "display_date": display_date_label(today_str()),
+        "display_date": display_date_label(today_str(request), request),
         "user": user,
         "is_guest": request.session.get("is_guest", False),
     })
@@ -297,7 +315,7 @@ async def trackers_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("trackers.html", {
         "request": request,
         "trackers": trackers,
-        "display_date": display_date_label(today_str()),
+        "display_date": display_date_label(today_str(request), request),
         "user": user,
         "is_guest": request.session.get("is_guest", False),
     })
@@ -314,7 +332,7 @@ async def schedule_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("schedule.html", {
         "request": request,
         "blocks": blocks,
-        "display_date": display_date_label(today_str()),
+        "display_date": display_date_label(today_str(request), request),
         "user": user,
         "is_guest": request.session.get("is_guest", False),
     })
@@ -333,7 +351,7 @@ async def settings_page(request: Request, db: Session = Depends(get_db)):
         "request": request,
         "habits": habits,
         "categories": categories,
-        "display_date": display_date_label(today_str()),
+        "display_date": display_date_label(today_str(request), request),
         "user": user,
         "is_guest": request.session.get("is_guest", False),
     })
@@ -343,20 +361,20 @@ async def settings_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/app/week", response_class=HTMLResponse)
 async def week_view(request: Request, db: Session = Depends(get_db),
-                    week: Optional[str] = None):
+                    week: Optional[str] = None,
+                    page_date: Optional[str] = None):
     user_id = await require_user(request, db)
     if not user_id:
         return HTMLResponse(status_code=401)
 
-    ref_date = clamp_date(week) if week else today_str()
+    ref_date = clamp_date(week, request) if week else today_str(request)
     week_data = database.get_week_overview(db, user_id, ref_date)
-    # Use the page's current log_date from referer, or today
-    log_date = today_str()
+    log_date = clamp_date(page_date, request) if page_date else today_str(request)
     return templates.TemplateResponse("partials/week_grid.html", {
         "request": request,
         "week": week_data,
         "log_date": log_date,
-        "today": today_str(),
+        "today": today_str(request),
     })
 
 
@@ -364,12 +382,14 @@ async def week_view(request: Request, db: Session = Depends(get_db),
 async def week_toggle(request: Request, habit_id: int,
                       db: Session = Depends(get_db),
                       log_date: Optional[str] = Form(None),
-                      week: Optional[str] = Form(None)):
+                      week: Optional[str] = Form(None),
+                      page_date: Optional[str] = Form(None)):
     user_id = await require_user(request, db)
     if not user_id:
         return HTMLResponse(status_code=401)
 
-    log_date = clamp_date(log_date) if log_date else today_str()
+    log_date = clamp_date(log_date, request) if log_date else today_str(request)
+    page_log_date = clamp_date(page_date, request) if page_date else today_str(request)
     habit = database.get_habit(db, habit_id, user_id)
     if not habit:
         return HTMLResponse(status_code=404)
@@ -377,34 +397,58 @@ async def week_toggle(request: Request, habit_id: int,
     database.toggle_habit(db, habit_id, log_date)
     ref_date = week if week else log_date
     week_data = database.get_week_overview(db, user_id, ref_date)
-    # Determine the page's current log_date from query params
-    page_date = today_str()
-    return templates.TemplateResponse("partials/week_grid.html", {
+    body = templates.TemplateResponse("partials/week_grid.html", {
         "request": request,
         "week": week_data,
-        "log_date": page_date,
-        "today": today_str(),
-    })
+        "log_date": page_log_date,
+        "today": today_str(request),
+    }).body.decode()
+
+    # If the toggled day is the day shown in the checklist, OOB-sync the row + summary.
+    if log_date == page_log_date:
+        body += _oob_row_and_summary(request, db, user_id, habit_id, page_log_date)
+    return HTMLResponse(body)
+
+
+def _oob_row_and_summary(request: Request, db: Session, user_id: int,
+                          habit_id: int, log_date: str) -> str:
+    habits = database.get_habits_with_logs(db, user_id, log_date)
+    habit_data = next((h for h in habits if h["id"] == habit_id), None)
+    summary = database.get_today_summary(db, user_id, log_date)
+    out = ""
+    if habit_data is not None:
+        out += templates.TemplateResponse("partials/habit_row_oob.html", {
+            "request": request, "habit": habit_data, "log_date": log_date,
+        }).body.decode()
+    out += templates.TemplateResponse("partials/progress_header_oob.html", {
+        "request": request, "summary": summary,
+    }).body.decode()
+    return out
 
 
 @app.post("/habits/{habit_id}/recent-toggle", response_class=HTMLResponse)
 async def recent_toggle(request: Request, habit_id: int,
                         db: Session = Depends(get_db),
-                        log_date: Optional[str] = Form(None)):
+                        log_date: Optional[str] = Form(None),
+                        page_date: Optional[str] = Form(None)):
     user_id = await require_user(request, db)
     if not user_id:
         return HTMLResponse(status_code=401)
-    log_date = clamp_date(log_date) if log_date else today_str()
+    log_date = clamp_date(log_date, request) if log_date else today_str(request)
+    page_log_date = clamp_date(page_date, request) if page_date else today_str(request)
     habit = database.get_habit(db, habit_id, user_id)
     if not habit:
         return HTMLResponse(status_code=404)
     database.toggle_habit(db, habit_id, log_date)
-    recent_days = database.get_recent_days_overview(db, user_id, today_str(), n=3)
-    return templates.TemplateResponse("partials/recent_grid.html", {
+    recent_days = database.get_recent_days_overview(db, user_id, today_str(request), n=3)
+    body = templates.TemplateResponse("partials/recent_grid.html", {
         "request": request,
         "recent_days": recent_days,
-        "log_date": today_str(),
-    })
+        "log_date": page_log_date,
+    }).body.decode()
+    if log_date == page_log_date:
+        body += _oob_row_and_summary(request, db, user_id, habit_id, page_log_date)
+    return HTMLResponse(body)
 
 
 # ── Single habit row (GET, for syncing after week-toggle) ─────────────────────
@@ -416,7 +460,7 @@ async def habit_row_get(request: Request, habit_id: int,
     user_id = await require_user(request, db)
     if not user_id:
         return HTMLResponse(status_code=401)
-    log_date = clamp_date(log_date) if log_date else today_str()
+    log_date = clamp_date(log_date, request) if log_date else today_str(request)
     habits = database.get_habits_with_logs(db, user_id, log_date)
     habit_data = next((h for h in habits if h["id"] == habit_id), None)
     if not habit_data:
@@ -438,7 +482,7 @@ async def toggle_habit_route(request: Request, habit_id: int,
     if not user_id:
         return HTMLResponse(status_code=401)
 
-    log_date = clamp_date(log_date) if log_date else today_str()
+    log_date = clamp_date(log_date, request) if log_date else today_str(request)
     habit = database.get_habit(db, habit_id, user_id)
     if not habit:
         return HTMLResponse(status_code=404)
@@ -447,12 +491,27 @@ async def toggle_habit_route(request: Request, habit_id: int,
     habits = database.get_habits_with_logs(db, user_id, log_date)
     habit_data = next((h for h in habits if h["id"] == habit_id), None)
     summary = database.get_today_summary(db, user_id, log_date)
-    return templates.TemplateResponse("partials/habit_row.html", {
+    body = templates.TemplateResponse("partials/habit_row.html", {
         "request": request,
         "habit": habit_data,
         "log_date": log_date,
         "summary": summary,
-    })
+    }).body.decode()
+    # OOB-sync grids + progress header so all views stay aligned.
+    week_data = database.get_week_overview(db, user_id, log_date)
+    recent_days = database.get_recent_days_overview(db, user_id, today_str(request), n=3)
+    body += '<div id="week-grid-container" hx-swap-oob="innerHTML">' + templates.TemplateResponse(
+        "partials/week_grid.html",
+        {"request": request, "week": week_data, "log_date": log_date, "today": today_str(request)},
+    ).body.decode() + '</div>'
+    body += '<div id="recent-days-container" hx-swap-oob="innerHTML">' + templates.TemplateResponse(
+        "partials/recent_grid.html",
+        {"request": request, "recent_days": recent_days, "log_date": log_date},
+    ).body.decode() + '</div>'
+    body += templates.TemplateResponse("partials/progress_header_oob.html", {
+        "request": request, "summary": summary,
+    }).body.decode()
+    return HTMLResponse(body)
 
 
 # ── Habit detail ──────────────────────────────────────────────────────────────
@@ -465,7 +524,7 @@ async def get_habit_detail(request: Request, habit_id: int,
     if not user_id:
         return HTMLResponse(status_code=401)
 
-    log_date = clamp_date(log_date) if log_date else today_str()
+    log_date = clamp_date(log_date, request) if log_date else today_str(request)
     habit = database.get_habit(db, habit_id, user_id)
     if not habit:
         return HTMLResponse(status_code=404)
@@ -493,7 +552,7 @@ async def save_log(
     if not user_id:
         return HTMLResponse(status_code=401)
 
-    log_date = clamp_date(log_date) if log_date else today_str()
+    log_date = clamp_date(log_date, request) if log_date else today_str(request)
     habit = database.get_habit(db, habit_id, user_id)
     if not habit:
         return HTMLResponse(status_code=404)
@@ -544,6 +603,7 @@ async def create_habit_route(
         db, user_id, name, description,
         metric_enabled in ("on", "1", "true"),
         metric_unit, metric_default, metric_max, metric_step,
+        start_date=today_str(request),
     )
     return templates.TemplateResponse("partials/settings_row.html", {
         "request": request,
@@ -569,7 +629,7 @@ async def update_habit_route(
     if not user_id:
         return HTMLResponse(status_code=401)
 
-    viewing_date = clamp_date(log_date) if log_date else today_str()
+    viewing_date = clamp_date(log_date, request) if log_date else today_str(request)
     habit = database.update_habit(
         db, habit_id, user_id, name, description,
         metric_enabled in ("on", "1", "true"),
@@ -622,6 +682,7 @@ async def quick_create_habit(request: Request, db: Session = Depends(get_db),
         return HTMLResponse(status_code=401)
     habit = database.create_habit(
         db, user_id, name.strip(), "", False, "", None, None, 0.5,
+        start_date=today_str(request),
     )
     if category_id and category_id.isdigit():
         database.set_habit_category(db, habit.id, user_id, int(category_id))
@@ -685,7 +746,7 @@ async def api_heatmap(request: Request, db: Session = Depends(get_db)):
     if not user_id:
         return JSONResponse({})
 
-    end = datetime.now().date()
+    end = _today(request)
     start = end - timedelta(days=364)
     data = database.get_heatmap_data(db, user_id, start.isoformat(), end.isoformat())
     return JSONResponse(content=data)
@@ -699,7 +760,7 @@ async def api_stats_overview(request: Request, db: Session = Depends(get_db),
         return JSONResponse({})
 
     habits = database.get_habits(db, user_id)
-    today = datetime.now().date()
+    today = _today(request)
     if window == "week":
         start_d = today - timedelta(days=6)
     elif window == "month":
@@ -770,7 +831,7 @@ async def api_stats(request: Request, habit_id: int, db: Session = Depends(get_d
     if not habit:
         return JSONResponse({"error": "not found"}, status_code=404)
 
-    today = datetime.now().date()
+    today = _today(request)
     if window == "week":
         start_d = today - timedelta(days=6)
     elif window == "month":
@@ -802,7 +863,7 @@ async def api_stats(request: Request, habit_id: int, db: Session = Depends(get_d
 
     # Current streak & best streak
     # Build a dict of date_str -> truly completed
-    today = datetime.now().date()
+    today = _today(request)
     completed_dates = {}
     for d_entry in data:
         ds = d_entry["log_date"]
@@ -951,7 +1012,7 @@ async def api_summary(request: Request, db: Session = Depends(get_db),
     if not user_id:
         return JSONResponse({"total": 0, "done": 0})
 
-    log_date = log_date or today_str()
+    log_date = log_date or today_str(request)
     summary = database.get_today_summary(db, user_id, log_date)
     return JSONResponse(content=summary)
 
@@ -973,7 +1034,7 @@ async def todos_page(request: Request, db: Session = Depends(get_db)):
         "todos": todos,
         "todo_groups": todo_groups,
         "categories": categories,
-        "display_date": display_date_label(today_str()),
+        "display_date": display_date_label(today_str(request), request),
         "is_guest": request.session.get("is_guest", False),
     })
 
@@ -1189,7 +1250,7 @@ async def api_tracker_data(request: Request, tracker_id: int,
         return JSONResponse({"error": "not found"}, status_code=404)
     windows = {"7d": 7, "30d": 30, "90d": 90, "all": 365 * 10}
     days = windows.get(window, 30)
-    start = (datetime.now().date() - timedelta(days=days)).isoformat()
+    start = (_today(request) - timedelta(days=days)).isoformat()
     entries = database.get_tracker_entries(db, tracker_id, start)
     return JSONResponse({
         "tracker": {"id": tracker.id, "name": tracker.name, "unit": tracker.unit},
